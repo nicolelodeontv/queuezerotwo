@@ -1,0 +1,159 @@
+name: Release 2 real-device checks (BrowserStack)
+
+# Use [device-preflight] for a no-cost protected Preview check before any paid mobile sessions.
+# Use [run-real-device] only after the Preview preflight passes; it may incur BrowserStack charges.
+
+on:
+  # This workflow is branch-only until Release 2 lands. To opt into a cloud-device run,
+  # create a test-only commit whose message contains [run-real-device]. That marker is the deliberate opt-in to potentially billable BrowserStack sessions.
+  push:
+    branches: [release2-results-viewer-20261008]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  real-mobile:
+    # Avoid accidental BrowserStack usage/cost on routine PR commits.
+    if: ${{ github.event_name == 'workflow_dispatch' || contains(github.event.head_commit.message, '[run-real-device]') || contains(github.event.head_commit.message, '[device-preflight]') }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Check test syntax
+        run: node --check tests/browserstack-release1.mjs
+      - name: Verify isolated test deployment target
+        shell: bash
+        env:
+          APP_URL: ${{ secrets.QUEUEZEROTWO_TEST_APP_URL }}
+          TEST_SUPABASE_URL: https://yeytqiyhosoyuassjcef.supabase.co
+        run: |
+          node --input-type=module <<'NODE'
+          import assert from 'node:assert/strict';
+          const appUrl = process.env.APP_URL;
+          const testUrl = process.env.TEST_SUPABASE_URL;
+          assert.ok(appUrl, 'Set QUEUEZEROTWO_TEST_APP_URL to the SSO-bypass link for the test Preview deployment.');
+          const app = new URL(appUrl);
+          assert.ok(app.hostname.endsWith('.vercel.app'), 'BrowserStack must open a Vercel Preview deployment.');
+          assert.notEqual(app.hostname, 'queuezerotwo.vercel.app', 'Production URL is forbidden for device checks.');
+          assert.equal(testUrl, 'https://yeytqiyhosoyuassjcef.supabase.co', 'Only the dedicated QueueZeroTwo test project is allowed.');
+          assert.notEqual(testUrl, 'https://wochetemsnrysnjrgoed.supabase.co', 'Production Supabase is forbidden for device checks.');
+
+          // Fetch the Preview before allocating the requested real-device sessions.
+          // Vercel share links set cookies across redirects, so Node fetch needs a tiny cookie jar.
+          // Never print APP_URL, redirect locations, cookie values, or Supabase keys.
+          const cookieJar = [];
+          const cookieHeader = target => {
+            const u = new URL(target);
+            return cookieJar
+              .filter(c => (u.hostname === c.domain || u.hostname.endsWith('.' + c.domain)) &&
+                u.pathname.startsWith(c.path) && (!c.secure || u.protocol === 'https:'))
+              .map(c => c.name + '=' + c.value)
+              .join('; ');
+          };
+          let currentUrl = appUrl;
+          let response;
+          for (let hop = 0; hop < 10; hop++) {
+            const headers = {};
+            const cookie = cookieHeader(currentUrl);
+            if (cookie) headers.Cookie = cookie;
+            response = await fetch(currentUrl, { redirect: 'manual', headers });
+            const setCookies = typeof response.headers.getSetCookie === 'function'
+              ? response.headers.getSetCookie()
+              : (response.headers.get('set-cookie') ? [response.headers.get('set-cookie')] : []);
+            for (const header of setCookies) {
+              const [pair, ...attrs] = header.split(';');
+              const eq = pair.indexOf('=');
+              if (eq <= 0) continue;
+              const name = pair.slice(0, eq).trim();
+              const value = pair.slice(eq + 1).trim();
+              const attr = Object.fromEntries(attrs.map(s => {
+                const ix = s.indexOf('=');
+                return ix < 0 ? [s.trim().toLowerCase(), true] :
+                  [s.slice(0, ix).trim().toLowerCase(), s.slice(ix + 1).trim()];
+              }));
+              const host = new URL(currentUrl).hostname;
+              const domain = String(attr.domain || host).replace(/^\\./, '').toLowerCase();
+              const cookiePath = typeof attr.path === 'string' ? attr.path : '/';
+              for (let i = cookieJar.length - 1; i >= 0; i--) {
+                if (cookieJar[i].name === name && cookieJar[i].domain === domain && cookieJar[i].path === cookiePath) cookieJar.splice(i, 1);
+              }
+              if (attr['max-age'] !== '0' && value !== '') {
+                cookieJar.push({ name, value, domain, path: cookiePath, secure: Boolean(attr.secure) });
+              }
+            }
+            if (response.status >= 300 && response.status < 400 && response.headers.get('location')) {
+              currentUrl = new URL(response.headers.get('location'), currentUrl).toString();
+              continue;
+            }
+            break;
+          }
+          assert.ok(response, 'Preview share-link fetch did not return a response.');
+          assert.ok(!(response.status >= 300 && response.status < 400), 'Preview share-link redirect chain exceeded the limit.');
+          assert.ok(response.ok, `Preview share link returned HTTP ${response.status}.`);
+          const finalUrl = new URL(currentUrl);
+          assert.equal(finalUrl.hostname, app.hostname, 'Preview share link did not return to its deployment host after authentication.');
+          const html = await response.text();
+          assert.match(html, /id=["']pn["']/, 'Preview response is not the QueueZeroTwo app shell; share link may be expired or protection may be blocking it.');
+          const config = html.match(/const SB_URL=(["'])(https:\/\/[^"']+)\1,SB_KEY=(["'])([^"']+)\3;/);
+          assert.ok(config, 'Preview HTML must contain the app Supabase configuration.');
+          assert.equal(new URL(config[2]).origin, testUrl, 'Fetched Preview HTML must target the isolated test Supabase project.');
+          assert.ok(!config[4].startsWith('sb_secret_'), 'A Supabase secret key must never be embedded in browser HTML.');
+          console.log(`Preview fetch passed (HTTP ${response.status}): QueueZeroTwo app shell and isolated test backend verified.`);
+          console.log('Target guard passed: Vercel Preview URL + dedicated test Supabase project.'); // no-cost preflight
+          NODE
+      - name: Check BrowserStack credentials
+        id: credentials
+        shell: bash
+        env:
+          BROWSERSTACK_USERNAME: ${{ secrets.BROWSERSTACK_USERNAME }}
+          BROWSERSTACK_ACCESS_KEY: ${{ secrets.BROWSERSTACK_ACCESS_KEY }}
+          EVENT_NAME: ${{ github.event_name }}
+          HEAD_COMMIT_MESSAGE: ${{ github.event.head_commit.message }}
+        run: |
+          missing=()
+          if [[ -z "$BROWSERSTACK_USERNAME" ]]; then missing+=("BROWSERSTACK_USERNAME"); fi
+          if [[ -z "$BROWSERSTACK_ACCESS_KEY" ]]; then missing+=("BROWSERSTACK_ACCESS_KEY"); fi
+          if (( ${#missing[@]} == 0 )); then
+            echo "configured=true" >> "$GITHUB_OUTPUT"
+            echo "missing_secrets=" >> "$GITHUB_OUTPUT"
+            echo "BrowserStack credentials are present."
+          else
+            missing_csv=$(IFS=,; echo "${missing[*]}")
+            echo "configured=false" >> "$GITHUB_OUTPUT"
+            echo "missing_secrets=$missing_csv" >> "$GITHUB_OUTPUT"
+            if [[ "$EVENT_NAME" == "workflow_dispatch" || "$HEAD_COMMIT_MESSAGE" == *"[run-real-device]"* ]]; then
+              echo "::error title=Real-device gate blocked::Missing repository Actions secrets: $missing_csv. No secret values were printed."
+              exit 1
+            fi
+            echo "::notice title=No-cost preflight only::Preview target passed. Missing BrowserStack secret(s): $missing_csv. No device session will start."
+            echo "Missing BrowserStack secret(s): $missing_csv" >> "$GITHUB_STEP_SUMMARY"
+          fi
+      - name: Report no-cost preflight result
+        if: ${{ github.event_name != 'workflow_dispatch' && contains(github.event.head_commit.message, '[device-preflight]') }}
+        env:
+          BROWSERSTACK_CONFIGURED: ${{ steps.credentials.outputs.configured }}
+          MISSING_SECRETS: ${{ steps.credentials.outputs.missing_secrets }}
+        run: |
+          echo "Protected Preview URL guard passed and points at the dedicated test Supabase project." >> "$GITHUB_STEP_SUMMARY"
+          if [[ "$BROWSERSTACK_CONFIGURED" == "true" ]]; then
+            echo "BrowserStack credentials are configured." >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "BrowserStack run is blocked until these repository secrets are added: $MISSING_SECRETS." >> "$GITHUB_STEP_SUMMARY"
+          fi
+          echo "No BrowserStack device session was started. This is not a physical-device pass." >> "$GITHUB_STEP_SUMMARY"
+      - name: Install Playwright client
+        if: ${{ github.event_name == 'workflow_dispatch' || contains(github.event.head_commit.message, '[run-real-device]') }}
+        run: npm install --no-save --no-package-lock playwright@1.56.1
+      - name: Run Release 2 scenarios on real iPhone Safari and Android Chrome
+        if: ${{ github.event_name == 'workflow_dispatch' || contains(github.event.head_commit.message, '[run-real-device]') }}
+        env:
+          BROWSERSTACK_USERNAME: ${{ secrets.BROWSERSTACK_USERNAME }}
+          BROWSERSTACK_ACCESS_KEY: ${{ secrets.BROWSERSTACK_ACCESS_KEY }}
+          APP_URL: ${{ secrets.QUEUEZEROTWO_TEST_APP_URL }}
+          TEST_SUPABASE_URL: https://yeytqiyhosoyuassjcef.supabase.co
+        run: node tests/browserstack-release1.mjs

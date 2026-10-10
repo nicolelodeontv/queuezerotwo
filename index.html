@@ -284,20 +284,52 @@ const K='pickleStackState',$=id=>document.getElementById(id);
 const SB_URL='https://wochetemsnrysnjrgoed.supabase.co',SB_KEY='sb_publishable_vk1EKES125_AzGi9iPHxSw_XiliPhcA';
 const sb=SB_URL&&SB_KEY&&window.supabase?supabase.createClient(SB_URL,SB_KEY):null,lt={};
 const viewerClient=code=>SB_URL&&SB_KEY&&window.supabase?supabase.createClient(SB_URL,SB_KEY,{global:{headers:{'x-picklestack-session-code':code}}}):null;
+const resultsViewerClient=code=>SB_URL&&SB_KEY&&window.supabase?supabase.createClient(SB_URL,SB_KEY,{global:{headers:{'x-picklestack-results-code':code}}}):null;
 const PUBLISH_QUEUE_KEY='queuezerotwo-publish-queue-v1';
-let PQ=[],PQS=0,PQBusy=false,PQRetry=null;
+let PQ=[],PQS=0,PQBusy=false,PQRetry=null,PQInflightId=null;
+const StorageFailures=new Set();
+function storageWriteFailed(kind){
+  const first=!StorageFailures.has(kind);
+  StorageFailures.add(kind);
+  if(first)toast('Device storage could not safely save your latest changes. They may exist only in memory. Export a backup and free storage before continuing.','error');
+  syncMarker();
+}
+function storageWriteSucceeded(kind){if(StorageFailures.delete(kind))syncMarker()}
+addEventListener('beforeunload',e=>{if(StorageFailures.size){e.preventDefault();e.returnValue='Some changes are not safely saved on this device. Export a backup before leaving.';return e.returnValue}});
+function newPublishEntryId(){try{const b=new Uint8Array(16);crypto.getRandomValues(b);return Array.from(b,v=>v.toString(16).padStart(2,'0')).join('')}catch(e){return Date.now().toString(36)+'-'+Math.random().toString(36).slice(2)+'-'+Math.random().toString(36).slice(2)}}
 function loadPublishQueue(){
   try{
     const q=JSON.parse(localStorage.getItem(PUBLISH_QUEUE_KEY)||'null');
     const items=Array.isArray(q&&q.items)?q.items:[];
-    PQ=items.filter(x=>x&&x.sid&&x.sh&&x.payload&&typeof x.payload==='object')
-      .slice(0,200).map(x=>({seq:Math.max(0,Number(x.seq)||0),sid:String(x.sid),sh:String(x.sh),kind:x.kind==='results'?'results':'state',attempts:Math.max(0,Number(x.attempts)||0),lastError:String(x.lastError||'').slice(0,160),payload:x.payload}));
-    PQS=Math.max(0,...PQ.map(x=>x.seq));
+    const seenIds=new Set();
+    const normalized=items.filter(x=>x&&x.sid&&x.sh&&x.payload&&typeof x.payload==='object').map(x=>{
+      let id=String(x.id||'');
+      if(!id||seenIds.has(id)){do{id=newPublishEntryId()}while(seenIds.has(id))}
+      seenIds.add(id);
+      return {id,seq:Math.max(0,Number(x.seq)||0),sid:String(x.sid),sh:String(x.sh),kind:x.kind==='results'?'results':'state',rid:String(x.rid||'').slice(0,10),attempts:Math.max(0,Number(x.attempts)||0),lastError:String(x.lastError||'').slice(0,160),payload:x.payload};
+    });
+    // Whole-state writes supersede older state writes for the same host identity.
+    // Results snapshots are durable records and must never be trimmed by this compaction.
+    PQ=[];
+    for(const item of normalized){
+      if(item.kind==='state'){
+        for(let i=PQ.length-1;i>=0;i--){
+          const pending=PQ[i];
+          if(pending.kind==='state'&&pending.sid===item.sid&&pending.sh===item.sh)PQ.splice(i,1);
+        }
+      }
+      PQ.push(item);
+    }
+    PQS=PQ.reduce((max,x)=>Math.max(max,x.seq),0);
     savePublishQueue();
   }catch(e){PQ=[];PQS=0}
 }
-function savePublishQueue(){try{localStorage.setItem(PUBLISH_QUEUE_KEY,JSON.stringify({v:1,seq:PQS,items:PQ}))}catch(e){}}
-function persistStateOnly(){try{localStorage.setItem(K,JSON.stringify(S))}catch(e){}}
+function savePublishQueue(){
+  try{localStorage.setItem(PUBLISH_QUEUE_KEY,JSON.stringify({v:1,seq:PQS,items:PQ}));storageWriteSucceeded('queue');return true}
+  catch(e){storageWriteFailed('queue');return false}
+}
+function clearPublishQueue(){PQ=[];PQS=0;if(PQRetry){clearTimeout(PQRetry);PQRetry=null}savePublishQueue();syncMarker()}
+function persistStateOnly(){try{localStorage.setItem(K,JSON.stringify(S));storageWriteSucceeded('state');return true}catch(e){storageWriteFailed('state');return false}}
 function syncMarker(){
   const on=navigator.onLine,pending=PQ.length>0,stuck=pending&&on&&PQ.some(x=>x.attempts>=3);
   if(S&&S.ho){
@@ -305,6 +337,7 @@ function syncMarker(){
     $('ct').textContent='No longer host';
     return
   }
+  if(StorageFailures.size){$('ci').className='fa-solid fa-triangle-exclamation text-red-500';$('ct').textContent='Storage error · export backup';$('sr').textContent='Warning: some changes are not safely saved on this device. Export a backup and free storage.';return}
   $('ci').className='fa-solid fa-wifi '+(on?(stuck?'text-red-500':pending?'text-orange-400':'text-green-400'):'text-red-500');
   $('ct').textContent=on?(stuck?'Sync stuck':pending?'Sync pending':'Saved on this device'):(pending?'Offline · will sync':'Offline');
 }
@@ -312,16 +345,39 @@ function dropPublishQueue(sid,sh){
   PQ=PQ.filter(x=>x.sid!==sid||x.sh!==sh);
   savePublishQueue();syncMarker();
 }
-function queuePublishPayload(payload,sid,sh,kind='state'){
+function queuePublishPayload(payload,sid,sh,kind='state',rid=''){
   if(!sb||!sid||!sh)return false;
-  PQ.push({seq:++PQS,sid,sh,kind,attempts:0,lastError:'',payload:JSON.parse(JSON.stringify(payload))});
+  if(kind==='state'){
+    // Retain an in-flight write, but replace all older pending snapshots for this host.
+    for(let i=PQ.length-1;i>=0;i--){
+      const pending=PQ[i];
+      if(pending.kind==='state'&&pending.sid===sid&&pending.sh===sh&&pending.id!==PQInflightId)PQ.splice(i,1);
+    }
+  }
+  if(kind==='results'&&rid){
+    const existing=PQ.find(x=>x.kind==='results'&&x.rid===rid);
+    if(existing){
+      existing.payload=JSON.parse(JSON.stringify(payload));
+      existing.sid=sid;existing.sh=sh;existing.attempts=0;existing.lastError='';
+      savePublishQueue();syncMarker();flushPublishQueue();
+      return true
+    }
+  }
+  PQ.push({id:newPublishEntryId(),seq:++PQS,sid,sh,kind,rid:String(rid||'').slice(0,10),attempts:0,lastError:'',payload:JSON.parse(JSON.stringify(payload))});
   savePublishQueue();syncMarker();flushPublishQueue();
   return true
 }
 async function publishQueuedItem(item){
-  let q=await sb.rpc('publish_pickle_session',{p_code:item.sid,p_host_key:item.sh,p_payload:item.payload});
+  let q;
+  if(item.kind==='results'&&item.rid){
+    q=await sb.rpc('publish_pickle_results_v2',{p_live_code:item.sid,p_host_key:item.sh,p_results_code:item.rid,p_payload:item.payload});
+  }else{
+    q=await sb.rpc('publish_pickle_session',{p_code:item.sid,p_host_key:item.sh,p_payload:item.payload});
+  }
   const msg=q.error&&q.error.message||'';
-  if(q.error&&/expired session/i.test(msg)&&item.sid===S.sid&&item.sh===S.sh&&!S.ho){
+  // The server intentionally returns "Invalid host key or expired session" for a stale host after handoff.
+  // A mismatched host key must demote this device, not trigger expired-session recovery.
+  if(q.error&&/expired session/i.test(msg)&&!/invalid host key/i.test(msg)&&!item.rid&&item.sid===S.sid&&item.sh===S.sh&&!S.ho){
     const oldSid=item.sid,oldSh=item.sh,nid=randLiveCode(),nkey=randHostKey();
     S.sid=nid;S.sh=nkey;
     PQ.forEach(x=>{if(x.sid===oldSid&&x.sh===oldSh){x.sid=nid;x.sh=nkey}});
@@ -336,6 +392,7 @@ async function publishQueuedItem(item){
   }
   return q
 }
+
 async function flushPublishQueue(){
   if(PQBusy||!sb||!PQ.length||!navigator.onLine)return;
   PQBusy=true;
@@ -346,7 +403,12 @@ async function flushPublishQueue(){
       item.attempts=Math.max(0,Number(item.attempts)||0)+1;
       item.lastError='';
       savePublishQueue();syncMarker();
-      const q=await publishQueuedItem(item);
+      let q;
+      PQInflightId=item.id;
+      try{q=await publishQueuedItem(item)}finally{if(PQInflightId===item.id)PQInflightId=null}
+      // Session transitions can clear this item while its network request is in flight.
+      // Ignore the stale completion so its failure cannot mark or stall the new session.
+      if(!PQ.some(x=>x.id===item.id)){syncMarker();continue}
       if(q.error){
         item.lastError=String(q.error.message||'Publish failed').slice(0,160);
         savePublishQueue();syncMarker();
@@ -356,9 +418,9 @@ async function flushPublishQueue(){
         }
         break
       }
-      PQ.shift();savePublishQueue();syncMarker();
-      if(item.kind==='results'&&S.ended&&S.sid===item.sid&&S.sh===item.sh&&!S.rid){
-        S.rid=item.sid;persistStateOnly()
+      const qi=PQ.findIndex(x=>x.id===item.id);if(qi>=0)PQ.splice(qi,1);savePublishQueue();syncMarker();
+      if(item.kind==='results'&&item.rid&&S.ended&&S.sid===item.sid&&S.sh===item.sh){
+        S.rid=String(q.data||item.rid).slice(0,10);S.rr=!!S.rid;S.lr=false;persistStateOnly();showRes()
       }
     }
   }finally{
@@ -368,10 +430,10 @@ async function flushPublishQueue(){
   }
 }
 function push(){}
-const mk=()=>({queue:[],waiting:[],rest:{},log:[],target:11,lv:{},md:'bal',sd:0,gp:{},wt:{},ws:false,wl:2,eq:false,tts:false,hap:true,courts:[1,2,3,4].map(id=>({id,name:'Court '+id,isActive:false,players:[],score:[0,0],mid:'',t:0}))});
-let S=mk(),V=null,SV=null;
+const mk=()=>({queue:[],waiting:[],rest:{},log:[],target:11,lv:{},md:'bal',sd:0,gp:{},wt:{},ws:false,wl:2,eq:false,tts:false,hap:true,rr:false,lr:false,courts:[1,2,3,4].map(id=>({id,name:'Court '+id,isActive:false,players:[],score:[0,0],mid:'',t:0}))});
+let S=mk(),V=null,SV=null,RA=null;
 const esc=s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-const win=(s,t)=>Math.max(s[0],s[1])>=t&&Math.abs(s[0]-s[1])>=(S.wb===1?1:2)?(s[0]>s[1]?0:1):-1;
+const win=(s,t,wb=S.wb)=>Math.max(s[0],s[1])>=t&&Math.abs(s[0]-s[1])>=(wb===1?1:2)?(s[0]>s[1]?0:1):-1;
 const tx=(p,i)=>p.slice(i*2,i*2+2).join(' & ');
 const nm=(p,i)=>esc(tx(p,i));
 const hm=t=>new Date(t).toLocaleTimeString([],{hour:'numeric',minute:'2-digit'});
@@ -387,8 +449,8 @@ function normalizeWaitTimes(queue,raw){
 function markWaiting(players,at=Date.now()){S.wt=S.wt||{};players.forEach(p=>{S.wt[wk(p)]=at})}
 function clearWaiting(players){if(!S.wt)return;players.forEach(p=>delete S.wt[wk(p)])}
 
-function load(){try{const s=JSON.parse(localStorage.getItem(K));if(s&&s.courts){S=s;S.log=S.log||[];S.waiting=S.waiting||[];S.rest=S.rest||{};S.target=S.target||11;S.lv=S.lv||{};S.md=S.md||'bal';S.sd=S.sd||0;S.gp=S.gp||{};S.wt=normalizeWaitTimes(S.queue,S.wt);S.ws=!!S.ws;S.eq=!!S.eq;S.tts=!!S.tts;S.wl=S.wl==null?2:S.wl;S.courts.forEach(c=>{c.score=c.score||[0,0]})}}catch(e){}}
-function save(){try{localStorage.setItem(K,JSON.stringify(S))}catch(e){}pushS()}
+function load(){try{const raw=localStorage.getItem(K),s=JSON.parse(raw);if(s&&s.courts){S=s;S.log=S.log||[];S.waiting=S.waiting||[];S.rest=S.rest||{};S.target=S.target||11;S.lv=S.lv||{};S.md=S.md||'bal';S.sd=S.sd||0;S.gp=S.gp||{};S.wt=normalizeWaitTimes(S.queue||[],S.wt);S.ws=!!S.ws;S.eq=!!S.eq;S.tts=!!S.tts;S.wl=S.wl==null?2:S.wl;S.rr=!!S.rr;S.lr=!!S.lr;if(s.ended&&s.rid&&!Object.prototype.hasOwnProperty.call(s,'rr'))S.lr=true;S.courts.forEach(c=>{c.score=c.score||[0,0]})}}catch(e){}}
+function save(){try{localStorage.setItem(K,JSON.stringify(S));storageWriteSucceeded('state')}catch(e){storageWriteFailed('state')}pushS()}
 
 function toast(m,type){const d=document.createElement('div');
 d.className='mb border px-4 py-3 rounded-lg shadow-xl pointer-events-auto text-sm font-medium '+(type=='error'?'bg-red-500/90 border-red-400':type=='success'?'bg-pickle-500/90 border-pickle-400 text-dark-900':'bg-dark-700/90 border-dark-700');
@@ -467,35 +529,59 @@ async function shareImg(){
   catch(e){if(e.name=='AbortError')return}
   const a=document.createElement('a');a.href=URL.createObjectURL(f);a.download=f.name;a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000);toast('Results image saved','success')
 }
+async function publishResultsSnapshot(payload){
+  if(!sb)return {error:new Error('Supabase unavailable')};
+  if(!S.sid||!S.sh||!S.rid)return {error:new Error('Live session identity unavailable')};
+  const q=await sb.rpc('publish_pickle_results_v2',{p_live_code:S.sid,p_host_key:S.sh,p_results_code:S.rid,p_payload:payload});
+  if(q.error&&S.hoff&&Date.now()-S.hoff<864e5&&/Invalid host key/i.test(q.error.message||'')){
+    const oldSid=S.sid,oldSh=S.sh;
+    S.hoff=0;S.ho=true;S.sid='';S.sh='';
+    dropPublishQueue(oldSid,oldSh);persistStateOnly();
+    toast('Live View host moved to another device.','info');
+    return {error:new Error('handed off')}
+  }
+  return q
+}
 async function endS(){
   S.courts.forEach(c=>{if(c.isActive){push(c,'cancelled');clear(c)}});
-  S.rid=Math.random().toString(36).slice(2,8);S.ended=true;
-  const pay={...sdata(),e:1,n:S.log.length,g:S.log.slice(0,60).map(l=>({p:l.p,s:l.s,c:l.c,w:l.w}))};
+  S.ended=true;S.lr=false;
+  if(!S.rid)S.rid=randResultCode();
+  S.rr=false;
+  const pay=resultsSnapshot();
   downloadBackup('End-of-session backup downloaded.');
   if(sb){
-    await flushPublishQueue();
-    ensureLiveIdentity();
-    const q=await publishSession(pay);
-    if(q.error){
-      S.rid='';
-      if(!S.ho&&S.sid&&S.sh)queuePublishPayload(pay,S.sid,S.sh,'results');
+    if(navigator.onLine){
+      await flushPublishQueue();
+      ensureLiveIdentity();
+      const q=await publishResultsSnapshot(pay);
+      if(!q.error){
+        S.rid=String(q.data||S.rid||'').slice(0,10);
+        S.rr=!!S.rid;S.lr=false;
+        dropPublishQueue(S.sid,S.sh)
+      }else if(!S.ho&&S.sid&&S.sh){
+        queuePublishPayload(pay,S.sid,S.sh,'results',S.rid)
+      }
     }else{
-      S.rid=S.sid;
-      dropPublishQueue(S.sid,S.sh);
+      ensureLiveIdentity();
+      if(!S.ho)queuePublishPayload(pay,S.sid,S.sh,'results',S.rid)
     }
   }
   save();render();showRes()
 }
+let RD=null;
 function showRes(){
+  if(RD&&RD.isConnected)RD.__close();
   RF=null;prepImg();
-  const url=S.rid?location.origin+location.pathname+'#s='+S.rid:'',r=stats();
+  const newUrl=S.rr&&S.rid?location.origin+location.pathname+'#r='+S.rid:'';
+  const legacyUrl=S.lr&&S.rid?location.origin+location.pathname+'#s='+S.rid:'';
+  const url=newUrl||legacyUrl,r=stats();
   const rows=r.length?r.map((x,i)=>'<div class="flex items-center gap-3 p-3 '+(i<3?'bg-pickle-500/10':'')+'"><span class="w-8 text-center font-sport text-lg '+(i<3?'text-pickle-500':'text-gray-400')+'">'+(i<3?['🥇','🥈','🥉'][i]:i+1)+'</span><div class="flex-1 min-w-0"><div class="truncate text-white">'+esc(x.n)+'</div><div class="text-xs text-gray-400">'+Math.round(100*x.w/(x.w+x.l))+'% win rate · '+(x.w+x.l)+' games · '+(x.d>0?'+':'')+x.d+'</div></div><div class="font-sport text-2xl text-green-400">'+x.w+'</div></div>').join(''):'<p class="p-6 text-center text-sm text-gray-400">No scored matches this session.</p>';
-  const lk=url?'<div class="qrb bg-white p-3 rounded-xl mx-auto" style="width:180px;max-width:100%">'+qrSvg(url)+'</div><div class="mt-3 bg-dark-900 border border-dark-700 rounded-lg px-3 py-2 text-xs text-gray-300 break-all">'+esc(url)+'</div><button class="cp w-full mt-3 '+bS+'">Copy results link</button>':'<p class="text-sm text-gray-400">Results link unavailable. Supabase could not be reached.</p>';
-  const d=modal('<div class="p-5 border-b border-dark-700"><h3 class="text-2xl text-white">Session Results</h3><p class="text-xs text-gray-400 mb-2">Your backup should download automatically. Tap Save backup if your browser blocks the automatic download.</p><input id="sn" maxlength="40" value="'+esc(S.name||'')+'" placeholder="Name this session (e.g. Sat 6pm)" aria-label="Session name" class="mt-2 w-full bg-dark-900 border border-dark-700 rounded-lg px-3 py-2 text-sm text-white"><p class="text-xs text-gray-400">'+S.log.length+' games played · session ended</p></div><div class="divide-y divide-dark-700">'+rows+'</div><div class="p-5 border-t border-dark-700 text-center">'+lk+'</div><div class="p-4 border-t border-dark-700 grid grid-cols-2 gap-3"><button class="bk col-span-2 '+bS+'"><i class="fa-solid fa-download"></i> Save backup</button><button class="sh col-span-2 '+bP+'"><i class="fa-solid fa-image"></i> Share results image</button><button class="nw col-span-2 '+bD+'">New session</button></div>',true);
+  const lk=url?'<div class="qrb bg-white p-3 rounded-xl mx-auto" style="width:180px;max-width:100%">'+qrSvg(url)+'</div><div class="mt-3 bg-dark-900 border border-dark-700 rounded-lg px-3 py-2 text-xs text-gray-300 break-all">'+esc(url)+'</div><button class="cp w-full mt-3 '+bS+'">Copy results link</button>':'<p class="text-sm text-gray-400">'+(S.ended?'Results link will appear when sync completes.':'Results link unavailable.')+'</p>';
+  const d=RD=modal('<div class="p-5 border-b border-dark-700"><h3 class="text-2xl text-white">Session Results</h3><p class="text-xs text-gray-400 mb-2">Your backup should download automatically. Tap Save backup if your browser blocks the automatic download.</p><input id="sn" maxlength="40" value="'+esc(S.name||'')+'" placeholder="Name this session (e.g. Sat 6pm)" aria-label="Session name" class="mt-2 w-full bg-dark-900 border border-dark-700 rounded-lg px-3 py-2 text-sm text-white"><p class="text-xs text-gray-400">'+S.log.length+' games played · session ended</p></div><div class="divide-y divide-dark-700">'+rows+'</div><div class="p-5 border-t border-dark-700 text-center">'+lk+'</div><div class="p-4 border-t border-dark-700 grid grid-cols-2 gap-3"><button class="bk col-span-2 '+bS+'"><i class="fa-solid fa-download"></i> Save backup</button><button class="sh col-span-2 '+bP+'"><i class="fa-solid fa-image"></i> Share results image</button><button class="nw col-span-2 '+bD+'">New session</button></div>',true);
   const cp=d.querySelector('.cp');if(cp)cp.onclick=async()=>{try{await navigator.clipboard.writeText(url);toast('Link copied','success')}catch(e){toast('Copy blocked by browser.','error')}};
   d.querySelector('.bk').onclick=()=>downloadBackup('Backup saved.');
   d.querySelector('.sh').onclick=shareImg;d.querySelector('#sn').oninput=e=>{S.name=e.target.value.trim().slice(0,40);save();RF=null;prepImg()};
-  d.querySelector('.nw').onclick=()=>ask('Start new session?','This clears the stack, courts, leaderboard and log. Make sure you have shared the results.',()=>{d.__close();const nc=S.courts.length,k={snd:S.snd,hap:S.hap,tts:S.tts,md:S.md,ws:S.ws,wl:S.wl,eq:S.eq,target:S.target,wb:S.wb,hist:archive()};S=Object.assign(mk(),k);setCourts(nc);save();render();toast('New session started','success')})
+  d.querySelector('.nw').onclick=()=>ask('Start new session?','This clears the stack, courts, leaderboard and log. Make sure you have shared the results.',()=>{d.__close();const nc=S.courts.length,k={snd:S.snd,hap:S.hap,md:S.md,ws:S.ws,wl:S.wl,eq:S.eq,tts:S.tts,target:S.target,wb:S.wb,hist:archive()};S=Object.assign(mk(),k);S.ho=false;S.hoff=0;S.sid='';S.sh='';clearPublishQueue();setCourts(nc);save();render();toast('New session started','success')})
 }
 
 /* Stack */
@@ -573,7 +659,7 @@ function cleanState(o){
     return {...base,id:Number(c&&c.id)||i+1,name:String(c&&c.name||base.name).slice(0,20),isActive:!!(c&&c.isActive),players:Array.isArray(c&&c.players)?c.players.slice(0,4).map(x=>String(x)):[],score:sc,mid:String(c&&c.mid||'').slice(0,32),t:Number(c&&c.t)||0,hold:Array.isArray(c&&c.hold)?c.hold.slice(0,2).map(x=>String(x)):null,stk:Number(c&&c.stk)||0}
   });
   R.log=Array.isArray(s.log)?s.log.slice(0,5000).filter(l=>l&&Array.isArray(l.p)&&l.p.length===4&&Array.isArray(l.s)&&l.s.length===2).map(l=>({...l,c:String(l.c||'').slice(0,20),p:l.p.slice(0,4).map(x=>String(x)),s:l.s.slice(0,2).map(v=>Math.max(0,Number(v)||0)),w:Number(l.w),tg:Number(l.tg)||R.target,t:Number(l.t)||Date.now(),d:Number(l.d)||0})): [];
-  R.rid='';delete R.sid;delete R.sh;
+  R.rid='';R.rr=false;R.lr=false;delete R.sid;delete R.sh;
   R.hist=Array.isArray(s.hist)?s.hist.slice(0,30).filter(x=>x&&Array.isArray(x.top)).map(x=>({id:String(x.id||'').slice(0,12),name:String(x.name||'Session').slice(0,40),t:Number(x.t)||0,g:Math.max(0,Number(x.g)||0),top:x.top.slice(0,10).map(p=>({n:String(p&&p.n||'').slice(0,40),w:Math.max(0,+(p&&p.w)||0),l:Math.max(0,+(p&&p.l)||0)}))})):[];
   R.courts.forEach(c=>{if(!c.isActive||c.players.length!==4)Object.assign(c,{isActive:false,players:[],score:[0,0],mid:'',t:0})});
   return R
@@ -584,8 +670,8 @@ $('imp').onchange=async e=>{
   const f=e.target.files&&e.target.files[0];e.target.value='';if(!f)return;
   try{
     const o=JSON.parse(await f.text()),R=cleanState(o);
-    ask('Restore backup?','This replaces the current local session. Live View control data is not included; a new session identity will be created on publish.',()=>{
-      S=R;S.sid='';S.sh='';S.rid='';save();render();toast('Backup restored','success')
+    ask('Restore backup?','This replaces the current local session and discards any unsent Live View updates for it. Export a backup first if you need those changes. Live View control data is not included; a new session identity will be created on publish.',()=>{
+      S=R;S.ho=false;S.hoff=0;S.sid='';S.sh='';S.rid='';clearPublishQueue();save();render();toast('Backup restored','success')
     })
   }catch(err){toast('Not a valid QueueZeroTwo backup','error')}
 };
@@ -757,21 +843,69 @@ render()};
 hd.addEventListener('pointermove',mv);hd.addEventListener('pointerup',up);hd.addEventListener('pointercancel',up)});
 })();
 
-function sdata(){const q=S.queue;return{t:S.target,courts:S.courts.map(c=>({n:c.name,a:c.isActive,p:c.players,s:c.score})),nx:pick4().length>=4?split4(pick4().map(i=>q[i])):[],q:q,lb:stats().slice(0,20)}}
+function firstName(n){const p=String(n).trim().split(/\s+/);return p[0]||String(n).trim()}
+function displayNameMap(names){
+  const all=names.flat(10).map(n=>String(n||'').trim()).filter(Boolean),unique=[],seen=new Set(),counts=new Map();
+  all.forEach(n=>{const k=n.toLowerCase();if(seen.has(k))return;seen.add(k);unique.push(n)});
+  unique.forEach(n=>{const f=firstName(n).toLowerCase();counts.set(f,(counts.get(f)||0)+1)});
+  const out=new Map();
+  unique.forEach(n=>{const p=n.split(/\s+/),f=p[0]||n,collision=(counts.get(f.toLowerCase())||0)>1;out.set(n.toLowerCase(),collision&&p.length>1?f+' '+p[p.length-1].charAt(0)+'.':f)});
+  return out
+}
+function safePlayerName(n,map){const s=String(n||'').trim();return map.get(s.toLowerCase())||firstName(s)}
+function timingMeta(){
+  const ds=S.log.map(l=>Number(l.d)||0).filter(d=>d>0&&d<=6*60*60*1000);
+  if(ds.length<3)return null;
+  return {a:Math.round(ds.slice(0,20).reduce((sum,d)=>sum+d,0)/Math.min(ds.length,20))}
+}
+function etaText(pos,tm){
+  if(!tm||!tm.a||pos<=4)return '';
+  return 'about '+Math.max(1,Math.round(((Math.ceil(pos/4)-1)*tm.a)/60000))+' min'
+}
+function buildUpNext(q){
+  const ix=pick4(),picked=ix.map(i=>({n:q[i],p:i+1}));
+  if(picked.length<4)return {nx:[],up:[]};
+  const ordered=split4(picked.map(x=>x.n)),left=picked.slice(),up=ordered.map(n=>{
+    const k=wk(n),j=left.findIndex(x=>wk(x.n)===k);
+    if(j<0)return {n,p:0};
+    return left.splice(j,1)[0]
+  });
+  return {nx:ordered,up}
+}
+function resultsSnapshot(){
+  const raw=stats().slice(0,200),logged=S.log.slice(0,500),dm=displayNameMap([raw.map(x=>x.n),logged.map(l=>l.p)]);
+  const leaderboard=raw.map(x=>({n:safePlayerName(x.n,dm),w:x.w,l:x.l,d:x.d}));
+  const matches=logged.map(l=>({c:String(l.c||'').slice(0,20),p:l.p.slice(0,4).map(n=>safePlayerName(n,dm)),s:l.s.slice(0,2).map(v=>Math.max(0,Number(v)||0)),w:Number(l.w),tg:Number(l.tg)||S.target,t:Number(l.t)||0,d:Number(l.d)||0}));
+  return {v:1,name:String(S.name||'').slice(0,40),totals:{players:leaderboard.length,games:S.log.length,courts:S.courts.length,playTo:S.target,winBy:S.wb===1?1:2},leaderboard,matches}
+}
+function sdata(){const q=S.queue,upm=buildUpNext(q),tm=timingMeta();return{t:S.target,wb:S.wb,courts:S.courts.map(c=>({n:c.name,a:c.isActive,p:c.players,s:c.score})),nx:upm.nx,up:upm.up,tm,q:q,lb:stats().slice(0,20)}}
 const LIVE_ALPH='ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+const randResultCode=()=>{const a=new Uint8Array(10);crypto.getRandomValues(a);return Array.from(a,v=>LIVE_ALPH[v%LIVE_ALPH.length]).join('')};
 const randLiveCode=()=>{const a=new Uint8Array(10);crypto.getRandomValues(a);return Array.from(a,v=>LIVE_ALPH[v%LIVE_ALPH.length]).join('')};
 const randHostKey=()=>{const a=new Uint8Array(32);crypto.getRandomValues(a);return Array.from(a,v=>v.toString(16).padStart(2,'0')).join('')};
 function ensureLiveIdentity(){if(!S.sid||!S.sh){S.sid=randLiveCode();S.sh=randHostKey()}}
 async function publishSession(payload){if(!sb)return {error:new Error('Supabase unavailable')};ensureLiveIdentity();let q=await sb.rpc('publish_pickle_session',{p_code:S.sid,p_host_key:S.sh,p_payload:payload});if(q.error&&S.hoff&&Date.now()-S.hoff<864e5&&/Invalid host key/i.test(q.error.message||'')){S.hoff=0;S.ho=true;S.sid='';S.sh='';toast('Live View host moved to another device.','info');return {error:new Error('handed off')}}
 if(q.error&&/Invalid host key|expired session/i.test(q.error.message||'')){S.sid=randLiveCode();S.sh=randHostKey();q=await sb.rpc('publish_pickle_session',{p_code:S.sid,p_host_key:S.sh,p_payload:payload})}return q}
 let st;function pushS(){if(!sb||S.ended||S.ho)return;ensureLiveIdentity();clearTimeout(st);st=setTimeout(()=>queuePublishPayload(sdata(),S.sid,S.sh,'state'),400)}
+function applyLiveSessionBroadcast(q){const p=q&&q.payload||{};if(!p.data)return false;SV.d=p.data;SV.ts=Date.parse(p.updated_at);render();return true}
 function renderSession(){const d=SV.d;if(!d){$('viewer').innerHTML='<div class="bg-dark-800 border border-dark-700 rounded-2xl p-8 text-center"><div class="text-blue-300 text-sm font-semibold mb-2">LIVE VIEW</div><p class="text-gray-400 text-sm">'+(SV.missing?'This Live View link is no longer active. The host may have ended the session or started a new one. Ask them for the current QR code.':'Connecting to the shared session…')+'</p><p class="text-xs text-gray-400 mt-2">'+(SV.missing?'Ask the organizer for a new Live View link.':'Your screen will update automatically once connected.')+'</p></div>';return}
 if(d.e)return renderResults(d);
-const courts=(d.courts||[]).map(c=>c.a?`<div class="bg-dark-800 border border-pickle-500/30 rounded-2xl p-4"><div class="flex justify-between mb-2"><h3 class="text-pickle-500 text-lg">${esc(c.n)}</h3><span class="text-xs text-red-400"><i class="fa-solid fa-circle live text-[8px]"></i> LIVE</span></div>${[0,1].map(i=>`<div class="flex justify-between items-center py-1"><span class="truncate">${nm(c.p,i)}</span><span class="font-sport text-3xl ${win(c.s,d.t)==i?'text-pickle-500':''}">${c.s[i]}</span></div>`).join('')}</div>`:`<div class="bg-dark-900 border border-dark-700 rounded-2xl p-4 text-center text-gray-400 opacity-70">${esc(c.n)} · open</div>`).join('');
-const nx=(d.nx||[]).length?`<div class="grid grid-cols-2 gap-3 text-sm"><div class="rounded-xl bg-blue-500/10 p-3"><div class="text-xs font-bold text-blue-400 mb-1">Team 1</div>${d.nx.slice(0,2).map(esc).join('<br>')}</div><div class="rounded-xl bg-orange-500/10 p-3"><div class="text-xs font-bold text-orange-400 mb-1">Team 2</div>${d.nx.slice(2).map(esc).join('<br>')}</div></div>`:'<p class="text-sm text-gray-400">Waiting for 4+ players.</p>';
-const lb=(d.lb||[]).length?`<table class="w-full text-sm text-center"><thead class="text-xs text-gray-400"><tr><th class="text-left p-2">#</th><th class="text-left">Player</th><th>W-L</th><th>+/-</th></tr></thead><tbody class="divide-y divide-dark-700">${d.lb.map((x,i)=>`<tr><td class="text-left p-2 text-gray-400">${i+1}</td><td class="text-left">${esc(x.n)}</td><td>${x.w}-${x.l}</td><td class="${x.d>0?'text-green-400':x.d<0?'text-red-400':''}">${x.d>0?'+':''}${x.d}</td></tr>`).join('')}</tbody></table>`:'<p class="text-sm text-gray-400 p-4 text-center">No scored matches yet.</p>';
-$('viewer').innerHTML=`<div class="flex justify-between items-center mb-4"><div><h2 class="text-2xl text-white">Live Session</h2><p class="text-xs text-gray-400">Read-only view for players on their own phones.</p></div><span class="text-xs font-bold rounded-full px-2 py-1 ${SV.status=='SUBSCRIBED'?'text-green-300 bg-green-500/10':'text-blue-300 bg-blue-500/10'}">${SV.status=='SUBSCRIBED'?'LIVE · CONNECTED':'CONNECTING'}</span></div><div class="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-6">${courts}</div><h3 class="text-xl text-white mb-2">Up Next</h3><div class="mb-6">${nx}</div><h3 class="text-xl text-white mb-2">The Stack (${(d.q||[]).length})</h3><p class="text-sm text-gray-300 mb-6">${(d.q||[]).length?(d.q||[]).map((p,i)=>`${i+1}. ${esc(p)}`).join(' &nbsp; '):'Empty'}</p><h3 class="text-xl text-white mb-2">Leaderboard</h3><div class="bg-dark-800 border border-dark-700 rounded-2xl overflow-x-auto">${lb}</div>`}
-
+const nameMap=displayNameMap([(d.courts||[]).flatMap(c=>c.p||[]),d.q||[],d.nx||[],(d.up||[]).map(x=>x.n),(d.lb||[]).map(x=>x.n)]);
+const player=n=>safePlayerName(n,nameMap),pair=(p,i)=>(p||[]).slice(i*2,i*2+2).map(player).join(' & ');
+const courts=(d.courts||[]).map(c=>c.a?'<div class="bg-dark-800 border border-pickle-500/30 rounded-2xl p-4"><div class="flex justify-between mb-2"><h3 class="text-pickle-500 text-lg">'+esc(c.n)+'</h3><span class="text-xs text-red-400"><i class="fa-solid fa-circle live text-[8px]"></i> LIVE</span></div>'+[0,1].map(i=>'<div class="flex justify-between items-center py-1"><span class="truncate">'+pair(c.p,i)+'</span><span class="font-sport text-3xl '+(win(c.s,d.t,d.wb===1?1:2)==i?'text-pickle-500':'')+'">'+c.s[i]+'</span></div>').join('')+'</div>':'<div class="bg-dark-900 border border-dark-700 rounded-2xl p-4 text-center text-gray-400 opacity-70">'+esc(c.n)+' · open</div>').join('');
+const upData=Array.isArray(d.up)&&d.up.length?d.up:(d.nx||[]).map((n,i)=>({n,p:i+1}));
+const nx=upData.length?'<div class="grid grid-cols-2 gap-3 text-sm"><div class="rounded-xl bg-blue-500/10 p-3"><div class="text-xs font-bold text-blue-400 mb-1">Team 1</div>'+upData.slice(0,2).map(x=>'<div class="flex items-center gap-2 py-0.5"><span class="text-[11px] text-gray-400 w-7 flex-none">#'+x.p+'</span><span class="truncate">'+esc(player(x.n))+'</span></div>').join('')+'</div><div class="rounded-xl bg-orange-500/10 p-3"><div class="text-xs font-bold text-orange-400 mb-1">Team 2</div>'+upData.slice(2).map(x=>'<div class="flex items-center gap-2 py-0.5"><span class="text-[11px] text-gray-400 w-7 flex-none">#'+x.p+'</span><span class="truncate">'+esc(player(x.n))+'</span></div>').join('')+'</div></div>':'<p class="text-sm text-gray-400">Waiting for 4+ players.</p>';
+const lb=(d.lb||[]).length?'<table class="w-full text-sm text-center"><thead class="text-xs text-gray-400"><tr><th class="text-left p-2">#</th><th class="text-left">Player</th><th>W-L</th><th>+/-</th></tr></thead><tbody class="divide-y divide-dark-700">'+d.lb.map((x,i)=>'<tr><td class="text-left p-2 text-gray-400">'+(i+1)+'</td><td class="text-left">'+esc(player(x.n))+'</td><td>'+x.w+'-'+x.l+'</td><td class="'+(x.d>0?'text-green-400':x.d<0?'text-red-400':'')+'">'+(x.d>0?'+':'')+x.d+'</td></tr>').join('')+'</tbody></table>':'<p class="text-sm text-gray-400 p-4 text-center">No scored matches yet.</p>';
+const stack=(d.q||[]).length?(d.q||[]).map((p,i)=>'<div class="flex items-center gap-2 py-0.5"><span class="text-[11px] text-gray-400 w-7 flex-none">#'+(i+1)+'</span><span class="truncate">'+esc(player(p))+'</span><span class="text-[11px] text-gray-500 ml-auto flex-none">'+etaText(i+1,d.tm)+'</span></div>').join(''):'Empty';
+const note=d.tm&&d.tm.a?'Wait estimates are rough and based on recent finished games.':'Positions are live queue positions.';
+$('viewer').innerHTML='<div class="flex justify-between items-center mb-4"><div><h2 class="text-2xl text-white">Live Session</h2><p class="text-xs text-gray-400">'+note+'</p></div><span class="text-xs font-bold rounded-full px-2 py-1 '+(SV.status=='SUBSCRIBED'?'text-green-300 bg-green-500/10':'text-blue-300 bg-blue-500/10')+'">'+(SV.status=='SUBSCRIBED'?'LIVE · CONNECTED':'CONNECTING')+'</span></div><div class="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-6">'+courts+'</div><h3 class="text-xl text-white mb-2">Up Next</h3><div class="mb-6">'+nx+'</div><h3 class="text-xl text-white mb-2">The Stack ('+(d.q||[]).length+')</h3><div class="bg-dark-800 border border-dark-700 rounded-2xl p-4 mb-6 max-h-80 overflow-y-auto">'+stack+'</div><h3 class="text-xl text-white mb-2">Leaderboard</h3><div class="bg-dark-800 border border-dark-700 rounded-2xl overflow-x-auto">'+lb+'</div>'}
+function renderArchivedResults(){
+  if(!RA.d){$('viewer').innerHTML='<div class="bg-dark-800 border border-dark-700 rounded-2xl p-8 text-center"><div class="text-pickle-500 text-sm font-semibold mb-2">SESSION RESULTS</div><p class="text-gray-400 text-sm">'+(RA.missing?'This results link has expired or is no longer available.':'Loading saved results…')+'</p><a href="'+location.pathname+'" class="inline-block mt-4 text-sm text-pickle-500 underline">Open QueueZeroTwo</a></div>';return}
+  const d=RA.d,lb=d.leaderboard||[],rows=lb.map((x,i)=>'<div class="flex items-center gap-3 p-3 '+(i<3?'bg-pickle-500/10':'')+'"><span class="w-8 text-center font-sport text-lg '+(i<3?'text-pickle-500':'text-gray-400')+'">'+(i<3?['🥇','🥈','🥉'][i]:i+1)+'</span><div class="flex-1 min-w-0"><div class="truncate">'+esc(x.n)+'</div><div class="text-xs text-gray-400">'+Math.round(100*x.w/(x.w+x.l))+'% win rate · '+(x.w+x.l)+' games · '+(x.d>0?'+':'')+x.d+'</div></div><div class="font-sport text-2xl text-green-400">'+x.w+'</div></div>').join('');
+  const games=(d.matches||[]).map(l=>'<div class="p-3 text-sm flex items-center gap-2"><span class="text-xs text-gray-400 w-14">'+esc(l.c)+'</span><span class="'+(l.w==0?'text-pickle-500 font-semibold':'')+'">'+esc((l.p||[]).slice(0,2).join(' & '))+'</span><span class="font-sport text-lg px-1">'+l.s[0]+'-'+l.s[1]+'</span><span class="'+(l.w==1?'text-pickle-500 font-semibold':'')+'">'+esc((l.p||[]).slice(2,4).join(' & '))+'</span></div>').join('');
+  const t=d.totals||{};
+  $('viewer').innerHTML='<div class="flex justify-between items-center mb-5"><div><h2 class="text-2xl text-white">'+esc(d.name||'Session Results')+'</h2><p class="text-xs text-gray-400">'+(t.players||0)+' players · '+(t.games||0)+' games · '+(t.courts||0)+' courts</p><p class="text-xs text-gray-500 mt-1">Read-only results · '+(RA.expires?'available until '+new Date(RA.expires).toLocaleDateString():'available for 30 days')+'</p></div><span class="text-xs font-bold text-gray-400 bg-dark-700 rounded-full px-2 py-1">READ-ONLY</span><span class="text-xs text-gray-500 mt-1 block">Available for 30 days</span></div><div class="bg-dark-800 border border-dark-700 rounded-2xl divide-y divide-dark-700 mb-6">'+(rows||'<p class="p-6 text-center text-sm text-gray-400">No scored matches.</p>')+'</div><h3 class="text-xl text-white mb-2">Match Log</h3><div class="bg-dark-800 border border-dark-700 rounded-2xl divide-y divide-dark-700 mb-6">'+(games||'<p class="p-6 text-center text-sm text-gray-400">No matches.</p>')+'</div><a href="'+location.pathname+'" class="inline-block text-sm text-pickle-500 underline">Open QueueZeroTwo</a>'
+}
 function renderLB(){const r=stats();$('lb').innerHTML=r.length?`<table class="w-full text-sm"><thead class="text-xs text-gray-400"><tr><th class="p-3 text-left">#</th><th class="text-left">Player</th><th>W-L</th><th>Win%</th><th class="pr-3">+/-</th></tr></thead><tbody class="divide-y divide-dark-700 text-center">${r.map((x,i)=>`<tr><td class="p-3 text-left text-gray-400">${i+1}</td><td class="text-left ${i==0?'text-pickle-500 font-semibold':''}">${esc(x.n)}</td><td>${x.w}-${x.l}</td><td>${Math.round(100*x.w/(x.w+x.l))}%</td><td class="pr-3 ${x.d>0?'text-green-400':x.d<0?'text-red-400':''}">${x.d>0?'+':''}${x.d}</td></tr>`).join('')}</tbody></table>`:'<p class="text-sm text-gray-400 py-8 text-center">Finish a scored match to start the leaderboard.</p>'}
 function renderViewer(){if(V&&V.code){$('viewer').innerHTML='<div class="bg-dark-800 border border-dark-700 rounded-2xl p-8 text-center"><p class="text-gray-300">This match link is no longer supported.</p><p class="text-xs text-gray-400 mt-2">Ask the organizer for a new Live View link.</p></div>';return}let s=V;const c=S.courts.find(x=>x.mid==s.m&&x.isActive);
 if(c)s={...s,p:c.players,s:c.score};else{const l=S.log.find(x=>x.mid==s.m);if(l)s={...s,p:l.p,s:l.s,f:1}}
@@ -780,7 +914,7 @@ $('viewer').innerHTML=`<div class="flex justify-between items-center mb-4"><h2 c
 <p class="text-xs text-gray-400 mt-4">${lv?(s.code?'Updating live.':'Updating live on this device.'):s.code?'Final score.':'Score as of '+hm(s.ts)+'. Ask for a new link for the latest score.'}</p><a href="${location.pathname}" class="inline-block mt-4 text-sm text-pickle-500 underline">Open QueueZeroTwo</a>`}
 
 function a11y(){document.querySelectorAll('button[title]:not([aria-label])').forEach(b=>b.setAttribute('aria-label',b.title));document.querySelectorAll('i.fa-solid').forEach(i=>i.setAttribute('aria-hidden','true'))}
-function render(){sndUi();hapUi();ttsUi();themeUi();if(SV)return renderSession();if(V)return renderViewer();$('tg').value=S.target;$('wbs').value=S.wb===1?1:2;$('ncs').value=S.courts.length;renderWaiting();renderQueue();renderNext();renderCourts();renderLB();renderLog();nav(NV);a11y();wake()}
+function render(){sndUi();hapUi();ttsUi();themeUi();if(SV)return renderSession();if(RA)return renderArchivedResults();if(V)return renderViewer();$('tg').value=S.target;$('wbs').value=S.wb===1?1:2;$('ncs').value=S.courts.length;renderWaiting();renderQueue();renderNext();renderCourts();renderLB();renderLog();nav(NV);a11y();wake()}
 
 /* Release 5: header menu (Live View stays visible, everything else lives in the menu) */
 function initMenu(){const live=document.querySelector('button[onclick="live()"]'),bar=live&&live.parentElement;if(!bar||$('mnb'))return;
@@ -823,7 +957,7 @@ setTimeout(()=>{if(d.isConnected)d.__close()},12e4)}}
 function takeover(){const m=/^#h=([A-Za-z0-9]{4,10})\.([0-9a-f]{64})$/.exec(location.hash);if(!m)return;history.replaceState(null,'',location.pathname+location.search);
 ask('Take over this Live View?',"This device becomes the host and the other device stops publishing. Viewers will see this device's stack and courts.",async()=>{
 if(!sb)return toast('Live View needs Supabase.','error');const nk=randHostKey(),q=await sb.rpc('rotate_pickle_host_key',{p_code:m[1],p_old_key:m[2],p_new_key:nk});
-if(q.error)return toast('Handoff failed: '+q.error.message,'error');S.sid=m[1];S.sh=nk;S.ho=false;S.hoff=0;save();render();toast('This device is now the host','success')})}
+if(q.error)return toast('Handoff failed: '+q.error.message,'error');S.sid=m[1];S.sh=nk;S.ho=false;S.hoff=0;clearPublishQueue();save();render();toast('This device is now the host','success')})}
  
 /* Release 1: court count, undo, wake lock, demo */
 function setCourts(n){n=Math.max(1,Math.min(8,n|0));const cs=S.courts;
@@ -854,15 +988,16 @@ themeApply(isLight());
 if(location.hash.startsWith('#m=')){const h=location.hash.slice(3);try{V=h.length<=10?{m:h,code:1,n:'Match',p:[],s:[0,0],tg:11,ts:Date.now()}:dec(h);$('app').classList.add('hidden');$('viewer').classList.remove('hidden');$('nav').classList.add('hidden')}catch(e){}}
 if(false){const ap=q=>{V={...V,n:q.court,p:q.players,s:q.score,tg:q.target,fin:q.status!='live',ts:Date.parse(q.updated_at)};render()};
 sb.from('live_matches').select('*').eq('code',V.m).maybeSingle().then(q=>q.data&&ap(q.data));
-sb.channel('m'+V.m).on('postgres_changes',{event:'*',schema:'public',table:'live_matches',filter:'code=eq.'+V.m},q=>q.new&&ap(q.new)).subscribe()}if(location.hash.startsWith('#s=')){SV={code:location.hash.slice(3),d:null,ts:Date.now(),status:'CONNECTING'};$('app').classList.add('hidden');$('viewer').classList.remove('hidden','max-w-xl');$('nav').classList.add('hidden');$('viewer').classList.add('max-w-3xl');
+sb.channel('m'+V.m).on('postgres_changes',{event:'*',schema:'public',table:'live_matches',filter:'code=eq.'+V.m},q=>q.new&&ap(q.new)).subscribe()}if(location.hash.startsWith('#r=')){RA={code:location.hash.slice(3),d:null,ts:Date.now(),status:'CONNECTING'};$('app').classList.add('hidden');$('viewer').classList.remove('hidden','max-w-xl');$('nav').classList.add('hidden');$('viewer').classList.add('max-w-3xl');
+if(sb){const rv=resultsViewerClient(RA.code),ap=q=>{RA.d=q.data;RA.expires=q.expires_at;RA.ts=Date.parse(q.created_at);render()};rv.from('pickle_results').select('data,created_at,expires_at').eq('code',RA.code).maybeSingle().then(q=>{if(q.data)ap(q.data);else{RA.missing=true;render()}}).catch(()=>{RA.missing=true;render()})}else{RA.missing=true}}if(location.hash.startsWith('#s=')){SV={code:location.hash.slice(3),d:null,ts:Date.now(),status:'CONNECTING'};$('app').classList.add('hidden');$('viewer').classList.remove('hidden','max-w-xl');$('nav').classList.add('hidden');$('viewer').classList.add('max-w-3xl');
 if(sb){const sv=viewerClient(SV.code),ap=q=>{SV.d=q.data;SV.ts=Date.parse(q.updated_at);render()};
 sv.from('live_sessions').select('code,data,updated_at,expires_at').eq('code',SV.code).maybeSingle().then(q=>{if(q.data)ap(q.data);else{SV.missing=true;render()}});
 const ch=sv.channel('session:'+SV.code,{config:{private:true}});
-ch.on('broadcast',{event:'session_update'},q=>{const p=q.payload||{};if(p.data)ap(p)});
+ch.on('broadcast',{event:'session_update'},applyLiveSessionBroadcast);
 ch.subscribe((status)=>{SV.status=status||'CONNECTING';render()})}}
 
 render();
-if(V||SV)$('faq').remove();
+if(V||SV||RA)$('faq').remove();
 takeover();
 if(S.ended&&!V&&!SV)showRes();
 addEventListener('storage',e=>{if(e.key==K){load();render()}});
