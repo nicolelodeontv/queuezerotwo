@@ -1,5 +1,5 @@
 /* QueueZeroTwo service worker. Bump V on each release to refresh the cache. Profiles are included in the app shell. */
-const V = 'queuezerotwo-v25';
+const V = 'queuezerotwo-v26';
 const SHELL = ['/', '/manifest.webmanifest', '/tailwind.css', '/profiles.js', '/favicon.svg', '/icon-192.png', '/icon-512.png', '/icon-maskable-512.png', '/apple-touch-icon.png'];
 const CDN = [
   'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js',
