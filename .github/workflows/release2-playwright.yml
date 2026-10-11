@@ -70,6 +70,8 @@ jobs:
           node --check /tmp/queuezerotwo-inline.js
       - name: Check Preview configuration build script
         run: node --check scripts/configure-preview.mjs
+      - name: Test Production and Preview CSP rules
+        run: node tests/vercel-config.mjs
       - name: Test Preview backend guard
         run: node tests/configure-preview.mjs
       - name: Check Release 2 Playwright test syntax
