@@ -1,1 +1,1 @@
-Explicitly trigger the Release 2 real-device test suite after the no-cost v27 protected Preview guard passed. Target is the dedicated test Supabase project only; this does not change Production.
+Temporary trigger for a no-cost QueueZeroTwo v27 protected Preview preflight. Does not modify the app or start paid device sessions.
