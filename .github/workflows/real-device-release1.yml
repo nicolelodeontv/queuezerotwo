@@ -4,8 +4,8 @@ name: Release 2 real-device checks (BrowserStack)
 # Use [run-real-device] only after the Preview preflight passes; it may incur BrowserStack charges.
 
 on:
-  # This workflow is branch-only until Release 2 lands. To opt into a cloud-device run,
-  # create a test-only commit whose message contains [run-real-device]. That marker is the deliberate opt-in to potentially billable BrowserStack sessions.
+  # Push-triggered checks run only on the designated test branch. Use [device-preflight] for the no-cost gate;
+  # use [run-real-device] only after it passes because that marker may start billable BrowserStack sessions.
   push:
     branches: [release2-results-viewer-20261008]
   workflow_dispatch:
@@ -77,7 +77,7 @@ jobs:
                   [s.slice(0, ix).trim().toLowerCase(), s.slice(ix + 1).trim()];
               }));
               const host = new URL(currentUrl).hostname;
-              const domain = String(attr.domain || host).replace(/^\\./, '').toLowerCase();
+              const domain = String(attr.domain || host).replace(/^\./, '').toLowerCase();
               const cookiePath = typeof attr.path === 'string' ? attr.path : '/';
               for (let i = cookieJar.length - 1; i >= 0; i--) {
                 if (cookieJar[i].name === name && cookieJar[i].domain === domain && cookieJar[i].path === cookiePath) cookieJar.splice(i, 1);
