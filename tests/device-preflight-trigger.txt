@@ -1,1 +1,1 @@
-Temporary trigger file for the no-cost QueueZeroTwo v27 isolated Preview check. This does not alter application code or invoke paid device sessions.
+Temporary trigger for a no-cost QueueZeroTwo v27 protected Preview preflight. Does not modify the app or start paid device sessions.
