@@ -1,1 +1,1 @@
-Temporary trigger for a no-cost QueueZeroTwo v27 protected Preview preflight. Does not modify the app or start paid device sessions.
+Temporary trigger for the verified QueueZeroTwo v27 test-only real-device run. Must use the isolated test backend; never merge this trigger into Production.
