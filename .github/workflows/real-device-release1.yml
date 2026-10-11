@@ -7,7 +7,7 @@ on:
   # Push-triggered checks run only on the designated test branch. Use [device-preflight] for the no-cost gate;
   # use [run-real-device] only after it passes because that marker may start billable BrowserStack sessions.
   push:
-    branches: [release2-results-viewer-20261008]
+    branches: [release2-results-viewer-20261008, release2-current-v27-20261012]
   workflow_dispatch:
 
 permissions:
