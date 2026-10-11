@@ -72,12 +72,12 @@ async function setupFour(page) {
   assert.equal(await page.locator('#qc').innerText(), '4');
 }
 
-async function simulateV25ToV26(browser) {
+async function simulateV25ToV27(browser) {
   const context = await browser.newContext({...devices['Desktop Chrome'],serviceWorkers:'allow',locale:'en-US'});
   const page = await context.newPage();
   let swFetch = 0;
   const currentSw = fs.readFileSync(path.resolve('sw.js'), 'utf8');
-  assert.match(currentSw,/queuezerotwo-v26/);
+  assert.match(currentSw,/queuezerotwo-v27/);
   const oldV25 = `const V='queuezerotwo-v25';self.addEventListener('install',e=>e.waitUntil(caches.open(V).then(c=>c.put('/__queuezerotwo_v25_sentinel__',new Response('v25'))).then(()=>self.skipWaiting())));self.addEventListener('activate',e=>e.waitUntil(self.clients.claim()));`;
   await context.route('**/sw.js', async route => {
     swFetch++;
@@ -92,7 +92,7 @@ async function simulateV25ToV26(browser) {
   await page.evaluate(async()=>{const r=await navigator.serviceWorker.getRegistration();await r.update()});
   await page.waitForFunction(async()=>{
     const r=await navigator.serviceWorker.getRegistration();
-    return !!r?.waiting || await caches.has('queuezerotwo-v26');
+    return !!r?.waiting || await caches.has('queuezerotwo-v27');
   },null,{timeout:10000});
   await page.evaluate(async()=>{
     const r=await navigator.serviceWorker.getRegistration();
@@ -100,11 +100,11 @@ async function simulateV25ToV26(browser) {
   });
   await page.waitForFunction(async()=>{
     const r=await navigator.serviceWorker.getRegistration();
-    return !!r && !r.waiting && r.active?.state==='activated' && await caches.has('queuezerotwo-v26');
+    return !!r && !r.waiting && r.active?.state==='activated' && await caches.has('queuezerotwo-v27');
   },null,{timeout:10000});
   await page.reload({waitUntil:'networkidle'});
   const out=await page.evaluate(async()=>{
-    const cache=await caches.open('queuezerotwo-v26');
+    const cache=await caches.open('queuezerotwo-v27');
     return {
       queue:JSON.parse(localStorage.getItem('queuezerotwo-publish-queue-v1')||'{"items":[]}').items,
       state:JSON.parse(localStorage.getItem('pickleStackState')||'{}'),
@@ -409,7 +409,7 @@ async function main() {
   const pp = await pixel.newPage();
   const syncPublishes = [];
   const resultPublishes = [];
-  await simulateV25ToV26(browser);
+  await simulateV25ToV27(browser);
   await simulateV26ToV27(browser);
   await avatarProfileRegression(browser);
   await leaderboardPodiumRegression(browser);
