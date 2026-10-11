@@ -390,7 +390,7 @@ async function avatarProfileRegression(browser) {
 
     await player.click();
     await page.locator('[data-remove-avatar]').click();
-    assert.equal(await page.evaluate(()=>JSON.parse(localStorage.getItem('pickleStackPlayers')||'{}').alpha?.avatar||'',''),
+    assert.equal(await page.evaluate(()=>JSON.parse(localStorage.getItem('pickleStackPlayers')||'{}').alpha?.avatar||''),'',
       'Removing the avatar clears it from the local profile');
   } finally {
     try { fs.unlinkSync(avatarBackupPath); } catch {}
