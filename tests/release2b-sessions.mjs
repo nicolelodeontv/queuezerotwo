@@ -72,16 +72,16 @@ async function setupFour(page) {
   assert.equal(await page.locator('#qc').innerText(), '4');
 }
 
-async function simulateV24ToV25(browser) {
+async function simulateV25ToV26(browser) {
   const context = await browser.newContext({...devices['Desktop Chrome'],serviceWorkers:'allow',locale:'en-US'});
   const page = await context.newPage();
   let swFetch = 0;
   const currentSw = fs.readFileSync(path.resolve('sw.js'), 'utf8');
-  assert.match(currentSw,/queuezerotwo-v25/);
-  const oldV24 = `const V='queuezerotwo-v24';self.addEventListener('install',e=>e.waitUntil(caches.open(V).then(c=>c.put('/__queuezerotwo_v24_sentinel__',new Response('v24'))).then(()=>self.skipWaiting())));self.addEventListener('activate',e=>e.waitUntil(self.clients.claim()));`;
+  assert.match(currentSw,/queuezerotwo-v26/);
+  const oldV25 = `const V='queuezerotwo-v25';self.addEventListener('install',e=>e.waitUntil(caches.open(V).then(c=>c.put('/__queuezerotwo_v25_sentinel__',new Response('v25'))).then(()=>self.skipWaiting())));self.addEventListener('activate',e=>e.waitUntil(self.clients.claim()));`;
   await context.route('**/sw.js', async route => {
     swFetch++;
-    await route.fulfill({status:200,contentType:'application/javascript',body:swFetch===1?oldV24:currentSw});
+    await route.fulfill({status:200,contentType:'application/javascript',body:swFetch===1?oldV25:currentSw});
   });
   await page.goto(APP,{waitUntil:'networkidle'});
   await page.waitForFunction(()=>!!navigator.serviceWorker?.controller,null,{timeout:5000});
@@ -92,7 +92,7 @@ async function simulateV24ToV25(browser) {
   await page.evaluate(async()=>{const r=await navigator.serviceWorker.getRegistration();await r.update()});
   await page.waitForFunction(async()=>{
     const r=await navigator.serviceWorker.getRegistration();
-    return !!r?.waiting || await caches.has('queuezerotwo-v25');
+    return !!r?.waiting || await caches.has('queuezerotwo-v26');
   },null,{timeout:10000});
   await page.evaluate(async()=>{
     const r=await navigator.serviceWorker.getRegistration();
@@ -100,15 +100,15 @@ async function simulateV24ToV25(browser) {
   });
   await page.waitForFunction(async()=>{
     const r=await navigator.serviceWorker.getRegistration();
-    return !!r && !r.waiting && r.active?.state==='activated' && await caches.has('queuezerotwo-v25');
+    return !!r && !r.waiting && r.active?.state==='activated' && await caches.has('queuezerotwo-v26');
   },null,{timeout:10000});
   await page.reload({waitUntil:'networkidle'});
   const out=await page.evaluate(async()=>{
-    const cache=await caches.open('queuezerotwo-v25');
+    const cache=await caches.open('queuezerotwo-v26');
     return {
       queue:JSON.parse(localStorage.getItem('queuezerotwo-publish-queue-v1')||'{"items":[]}').items,
       state:JSON.parse(localStorage.getItem('pickleStackState')||'{}'),
-      oldCache:await caches.has('queuezerotwo-v24'),
+      oldCache:await caches.has('queuezerotwo-v25'),
       profilesCached:!!(await cache.match('/profiles.js'))
     };
   });
@@ -255,6 +255,40 @@ async function realisticStorageQuotaRegression(browser) {
   await context.close();
 }
 
+async function leaderboardPodiumRegression(browser) {
+  const context = await freshContext(browser, devices['Desktop Chrome']);
+  const page = await context.newPage();
+  try {
+    await page.goto(APP, {waitUntil:'networkidle'});
+    await page.evaluate(() => {
+      S = mk();
+      S.log = [
+        {w:0,p:['Alpha','Beta','Gamma','Delta'],s:[11,4],c:'Court 1',tg:11,t:1,d:240000},
+        {w:0,p:['Alpha','Beta','Echo','Foxtrot'],s:[11,6],c:'Court 1',tg:11,t:2,d:240000},
+        {w:1,p:['Golf','Hotel','Gamma','Delta'],s:[6,11],c:'Court 2',tg:11,t:3,d:240000},
+      ];
+      renderLB();
+    });
+    const rows = await page.locator('#lb tbody tr').evaluateAll(items => items.slice(0,4).map(row => ({
+      classes: row.className,
+      rank: row.querySelector('.lb-rank-badge')?.getAttribute('aria-label'),
+      medal: row.querySelector('.lb-rank-badge')?.textContent.trim(),
+      player: row.children[1]?.textContent.trim(),
+    })));
+    assert.equal(rows[0].player,'Alpha');
+    assert.equal(rows[1].player,'Beta');
+    assert.equal(rows[2].player,'Gamma');
+    assert.deepEqual(rows.slice(0,3).map(row=>row.rank),['Rank 1','Rank 2','Rank 3']);
+    assert.deepEqual(rows.slice(0,3).map(row=>row.medal),['🥇','🥈','🥉']);
+    assert.match(rows[0].classes,/lb-podium-row.*lb-podium-1/);
+    assert.match(rows[1].classes,/lb-podium-row.*lb-podium-2/);
+    assert.match(rows[2].classes,/lb-podium-row.*lb-podium-3/);
+    assert.doesNotMatch(rows[3].classes,/lb-podium-row/);
+  } finally {
+    await context.close();
+  }
+}
+
 async function main() {
   const browser = await chromium.launch({headless: true});
   const desktop = await freshContext(browser, devices['Desktop Chrome']);
@@ -266,7 +300,8 @@ async function main() {
   const pp = await pixel.newPage();
   const syncPublishes = [];
   const resultPublishes = [];
-  await simulateV24ToV25(browser);
+  await simulateV25ToV26(browser);
+  await leaderboardPodiumRegression(browser);
   await durableQueueCompactionRegression(browser);
   const sync = await syncContext(browser, devices['Pixel 7'], syncPublishes, resultPublishes);
   const sp = await sync.newPage();
