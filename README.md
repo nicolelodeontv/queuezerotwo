@@ -8,14 +8,14 @@ Live: https://queuezerotwo.vercel.app
 
 - **Queue and teams:** paddle-stacking queue, a check-in list for players who have not arrived yet, skill levels, player reordering, and rest controls.
 - **Team modes:** Balanced or Social mix Up Next teams. Optional Winners stay with a configurable consecutive-win limit, plus Equal sit-outs fairness.
-- **Scoring:** play to 11, 15, or 21, with win by 1 or 2. Supports 1 to 8 courts, Undo after Finish & Log, Match Log, Leaderboard, and live standings.
-- **Sessions:** name a session, keep the last 30 in Past sessions, share a results link, and share a results image.
-- **Players:** all-time player profiles with per-player backup and restore.
+- **Scoring:** play to 11, 15, or 21, with win by 1 or 2. Supports 1 to 8 courts, Undo after Finish & Log, Match Log, live standings, and podium styling for the top three leaderboard players.
+- **Sessions:** name a session, keep the last 30 in Past sessions, and share finished results through a results link or image.
+- **Players:** all-time player profiles with skill levels, match history, partner statistics, per-player backup and restore, and optional local avatars. Avatar images are cropped and resized on this device and are not uploaded to Supabase.
 - **Backup:** Export and Import the whole session as JSON. Imports are validated and size-limited.
 - **On court:** large score controls, haptics, sound, voice announcements, wake lock during matches, and light/dark themes.
-- **Live View:** a read-only page for players to follow courts, Up Next, the stack, and the leaderboard in real time.
+- **Live View:** a read-only page for players to follow courts, queue positions, estimated waits, Up Next, the stack, the leaderboard, and finished-results snapshots.
 - **Host handoff:** transfer Live View hosting to another device with a QR code.
-- **Offline/PWA:** service worker caching with an update-ready prompt and installable PWA metadata.
+- **Offline/PWA:** service worker caching with an update-ready prompt and installable PWA metadata. Live session writes use a durable offline queue and retry after connectivity returns; finished-results entries are retained separately from replaceable live-state snapshots.
 
 ## How it works
 
