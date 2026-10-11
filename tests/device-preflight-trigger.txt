@@ -1,0 +1,1 @@
+Temporary branch trigger for the no-cost QueueZeroTwo v27 BrowserStack preflight. This file does not change app code or invoke paid device sessions.
