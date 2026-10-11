@@ -1,0 +1,1 @@
+Temporary branch-trigger marker for the no-cost BrowserStack preflight. This file does not alter application code or invoke a paid BrowserStack session.
