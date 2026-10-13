@@ -86,3 +86,7 @@ jobs:
         env:
           APP_URL: http://127.0.0.1:4173/
         run: node tests/release2b-sessions.mjs
+      - name: Sweep mobile, tablet, and desktop viewport widths
+        env:
+          APP_URL: http://127.0.0.1:4173/
+        run: node tests/responsive-viewport-sweep.mjs
