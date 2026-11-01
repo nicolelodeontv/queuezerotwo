@@ -451,6 +451,7 @@ const mk=()=>({queue:[],waiting:[],rest:{},log:[],target:11,lv:{},md:'bal',sd:0,
 let S=mk(),V=null,SV=null,RA=null;
 const esc=s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const num=v=>{const n=Number(v);return Number.isFinite(n)?n:0};
+const importedWinner=v=>v===0||v===1||v===-1?v:typeof v==='string'&&['-1','0','1'].includes(v)?Number(v):-1;
 const win=(s,t,wb=S.wb)=>Math.max(s[0],s[1])>=t&&Math.abs(s[0]-s[1])>=(wb===1?1:2)?(s[0]>s[1]?0:1):-1;
 const tx=(p,i)=>p.slice(i*2,i*2+2).join(' & ');
 const nm=(p,i)=>esc(tx(p,i));
@@ -674,7 +675,7 @@ function cleanState(o){
     const sc=Array.isArray(c&&c.score)&&c.score.length===2?c.score.map(v=>Math.max(0,Number(v)||0)):[0,0];
     return {...base,id:Number(c&&c.id)||i+1,name:String(c&&c.name||base.name).slice(0,20),isActive:!!(c&&c.isActive),players:Array.isArray(c&&c.players)?c.players.slice(0,4).map(x=>String(x)):[],score:sc,mid:String(c&&c.mid||'').slice(0,32),t:Number(c&&c.t)||0,hold:Array.isArray(c&&c.hold)?c.hold.slice(0,2).map(x=>String(x)):null,stk:Number(c&&c.stk)||0}
   });
-  R.log=Array.isArray(s.log)?s.log.slice(0,5000).filter(l=>l&&Array.isArray(l.p)&&l.p.length===4&&Array.isArray(l.s)&&l.s.length===2).map(l=>({...l,c:String(l.c||'').slice(0,20),p:l.p.slice(0,4).map(x=>String(x)),s:l.s.slice(0,2).map(v=>Math.max(0,Number(v)||0)),w:l.w!==null&&l.w!==''&&Number.isInteger(Number(l.w))&&[-1,0,1].includes(Number(l.w))?Number(l.w):-1,tg:Number(l.tg)||R.target,t:Number(l.t)||Date.now(),d:Number(l.d)||0})): [];
+  R.log=Array.isArray(s.log)?s.log.slice(0,5000).filter(l=>l&&Array.isArray(l.p)&&l.p.length===4&&Array.isArray(l.s)&&l.s.length===2).map(l=>({...l,c:String(l.c||'').slice(0,20),p:l.p.slice(0,4).map(x=>String(x)),s:l.s.slice(0,2).map(v=>Math.max(0,Number(v)||0)),w:importedWinner(l.w),tg:Number(l.tg)||R.target,t:Number(l.t)||Date.now(),d:Number(l.d)||0})): [];
   R.rid='';R.rr=false;R.lr=false;delete R.sid;delete R.sh;
   R.hist=Array.isArray(s.hist)?s.hist.slice(0,30).filter(x=>x&&Array.isArray(x.top)).map(x=>({id:String(x.id||'').slice(0,12),name:String(x.name||'Session').slice(0,40),t:Number(x.t)||0,g:Math.max(0,Number(x.g)||0),top:x.top.slice(0,10).map(p=>({n:String(p&&p.n||'').slice(0,40),w:Math.max(0,+(p&&p.w)||0),l:Math.max(0,+(p&&p.l)||0)}))})):[];
   R.courts.forEach(c=>{if(!c.isActive||c.players.length!==4)Object.assign(c,{isActive:false,players:[],score:[0,0],mid:'',t:0})});
