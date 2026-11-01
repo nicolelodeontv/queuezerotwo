@@ -853,9 +853,15 @@ async function main() {
 
     const endDialog = dp.locator('[role="dialog"]');
     await dp.locator('#rs').click();
+    await endDialog.getByRole('button', {name: 'Confirm'}).click();
+    await dp.waitForFunction(() => S.ended === true, null, {timeout: 5000});
+
+    // End Session opens the results view; backup is now a deliberate manual Export action.
+    await dp.keyboard.press('Escape');
+    await dp.locator('[role="dialog"]').waitFor({state: 'detached'});
     const [endBackupDownload] = await Promise.all([
       dp.waitForEvent('download'),
-      endDialog.getByRole('button', {name: 'Confirm'}).click(),
+      (async () => { await openMenu(dp); await dp.locator('#qmenu #exp').click(); })(),
     ]);
     await endBackupDownload.saveAs(endBackupPath);
     const endBackup = JSON.parse(fs.readFileSync(endBackupPath, 'utf8'));
@@ -863,11 +869,7 @@ async function main() {
     assert.equal(endBackup.version, 1);
     assert.equal(endBackup.state.ended, true);
 
-    // Close the results modal so subsequent fixture resets are not covered by it.
-    await dp.locator('.nw').click();
-    await dp.getByRole('button', {name: 'Confirm'}).click();
-
-    // Restore the end-session backup to prove it remains compatible with Import.
+    // Restore the manually exported end-session backup to prove it remains compatible with Import.
     await ip.goto(APP, {waitUntil: 'networkidle'});
     await ip.evaluate(() => localStorage.clear());
     await ip.reload({waitUntil: 'networkidle'});
@@ -881,17 +883,23 @@ async function main() {
     assert.equal(await ip.locator('#wbs').inputValue(), '1');
     assert.equal(await ip.locator('#ncs').inputValue(), '6');
 
-    // Mobile-sized fallback: ending a session downloads automatically and leaves a visible Save backup action.
+    // Mobile: after End Session, the manual Export action still backs up the ended state.
     await ip.evaluate(() => { localStorage.clear(); S=mk(); S.ended=false; sb.rpc=async()=>({data:true,error:null}); render(); });
     const mobileEndDialog=ip.locator('[role="dialog"]');
     await ip.locator('#rs').click();
-    const [mobileAutoBackup] = await Promise.all([
+    await mobileEndDialog.getByRole('button', {name: 'Confirm'}).click();
+    await ip.waitForFunction(() => S.ended === true, null, {timeout: 5000});
+    await ip.keyboard.press('Escape');
+    await ip.locator('[role="dialog"]').waitFor({state: 'detached'});
+    const mobileManualBackupPath=path.join(os.tmpdir(), 'queuezerotwo-release1-mobile-manual.json');
+    const [mobileManualBackup] = await Promise.all([
       ip.waitForEvent('download'),
-      mobileEndDialog.getByRole('button', {name: 'Confirm'}).click(),
+      (async () => { await openMenu(ip); await ip.locator('#qmenu #exp').click(); })(),
     ]);
-    await mobileAutoBackup.saveAs(path.join(os.tmpdir(), 'queuezerotwo-release1-mobile-auto.json'));
-    await ip.locator('[role="dialog"] .bk').waitFor({state:'visible', timeout:5000});
-    assert.equal(await ip.locator('[role="dialog"] .bk').isVisible(), true);
+    await mobileManualBackup.saveAs(mobileManualBackupPath);
+    const mobileBackupJson=JSON.parse(fs.readFileSync(mobileManualBackupPath, 'utf8'));
+    assert.equal(mobileBackupJson.app, 'QueueZeroTwo');
+    assert.equal(mobileBackupJson.state.ended, true);
     await ip.evaluate(() => localStorage.clear());
     await ip.reload({waitUntil: 'networkidle'});
 
