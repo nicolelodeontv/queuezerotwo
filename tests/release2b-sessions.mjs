@@ -873,6 +873,12 @@ async function main() {
     assert.equal(endBackup.version, 1);
     assert.equal(endBackup.state.ended, true);
 
+    // Exercise the intended New session flow to dismiss the locked Results dialog
+    // before reusing this desktop page for unrelated queue and scoring fixtures.
+    await dp.locator('[role="dialog"]').last().getByRole('button', {name: 'New session'}).click();
+    await dp.locator('[role="dialog"]').last().getByRole('button', {name: 'Confirm'}).click();
+    await dp.locator('[role="dialog"]').waitFor({state: 'detached'});
+
     // Restore the manually exported end-session backup to prove it remains compatible with Import.
     await ip.goto(APP, {waitUntil: 'networkidle'});
     await ip.evaluate(() => localStorage.clear());
