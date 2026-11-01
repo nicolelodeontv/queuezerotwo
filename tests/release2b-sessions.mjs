@@ -577,7 +577,11 @@ async function main() {
     // Exercise the client renderer with hostile text in both name and numeric fields.
     // The numeric strings must normalize to zero, never become HTML, even when the
     // server-side RPC guard is bypassed by this mocked GET response.
-    const hostileName='<img/src=x/onerror=alert(1)>',hostileNumeric='<svg onload=alert(1)>';
+    const hostileName='<img/src=x/onerror=alert(1)>',hostileNumeric='<svg/onload=alert(1)>';
+    const xssFailures=[];
+    const xssCheck=(pass,message)=>{if(!pass)xssFailures.push(message)};
+
+    // #r=: archived-results client rendering, with the database publish guard bypassed.
     const coldContext=await browser.newContext({...devices['Desktop Chrome'],serviceWorkers:'allow',locale:'en-US'});
     await coldContext.route(SUPABASE+'/**',route=>{
       const u=new URL(route.request().url());
@@ -592,17 +596,22 @@ async function main() {
     await coldPage.goto(APP+'#r=COLDRESULT1',{waitUntil:'networkidle'});
     await coldPage.getByText('Cold cache results',{exact:true}).waitFor({state:'visible',timeout:5000});
     await coldPage.getByText('READ-ONLY',{exact:true}).waitFor({state:'visible',timeout:5000});
-    assert.equal(coldAlerts,0);
     const coldText=await coldPage.locator('#viewer').innerText();
-    assert.equal(await coldPage.locator('#viewer img, #viewer svg, #viewer script').count(),0);
-    assert.ok(coldText.includes(hostileName),'the hostile player name must be rendered as literal text');
-    assert.equal(coldText.includes(hostileNumeric),false,'hostile numeric strings must normalize instead of appearing raw');
-    assert.match(coldText,/0 players · 0 games · 0 courts/);
-    assert.match(coldText,/0% win rate · 0 games · 0/);
-    assert.match(coldText,/0-9/);
+    const coldNodes=await coldPage.locator('#viewer').evaluate(el=>({
+      img:el.querySelectorAll('img').length,
+      svg:el.querySelectorAll('svg').length,
+      script:el.querySelectorAll('script').length
+    }));
+    xssCheck(coldAlerts===0,'#r= fired a JavaScript dialog');
+    xssCheck(coldNodes.img===0&&coldNodes.svg===0&&coldNodes.script===0,'#r= viewer contains an injected img, svg, or script element: '+JSON.stringify(coldNodes));
+    xssCheck(coldText.includes(hostileName),'#r= hostile player name was not displayed as literal text');
+    xssCheck(!coldText.includes(hostileNumeric),'#r= hostile numeric strings were not normalized to zero');
+    xssCheck(/0 players · 0 games · 0 courts/.test(coldText),'#r= totals.players/games did not normalize to zero');
+    xssCheck(/0% win rate · 0 games · 0/.test(coldText),'#r= leaderboard w/l/d did not normalize to zero');
+    xssCheck(/0-9/.test(coldText),'#r= archived match score did not normalize to zero');
     await coldContext.close();
 
-    // The #s= renderer is tested independently of the database publish guard too.
+    // #s=: Live View client rendering, independent of the database publish guard.
     const liveContext=await browser.newContext({...devices['Desktop Chrome'],serviceWorkers:'block',locale:'en-US'});
     const livePayload={t:11,wb:2,courts:[{n:'Court 1',a:true,p:[hostileName,'Bob','Cara','Dan'],s:[hostileNumeric,9]}],nx:[],up:[{n:hostileName,p:hostileNumeric}],tm:null,q:[],lb:[{n:hostileName,w:hostileNumeric,l:hostileNumeric,d:hostileNumeric}]};
     await liveContext.route(SUPABASE+'/**',route=>{
@@ -617,15 +626,22 @@ async function main() {
     livePage.on('dialog',async dialog=>{liveAlerts++;await dialog.dismiss()});
     await livePage.goto(APP+'#s=SAFELIVE01',{waitUntil:'domcontentloaded'});
     await livePage.getByRole('heading',{name:'Live Session'}).waitFor({state:'visible',timeout:10000});
-    assert.equal(liveAlerts,0);
     const safeLiveText=await livePage.locator('#viewer').innerText();
-    assert.equal(await livePage.locator('#viewer img, #viewer svg, #viewer script').count(),0);
-    assert.ok(safeLiveText.includes(hostileName),'the hostile player name must be rendered as literal text');
-    assert.equal(safeLiveText.includes(hostileNumeric),false,'hostile numeric strings must normalize instead of appearing raw');
-    assert.match(safeLiveText,/#1/,"an invalid Up Next position falls back to the player's display position");
-    assert.match(safeLiveText,/\n0\nCara & Dan\n9\n/);
-    assert.match(safeLiveText,/0-0/);
+    const liveNodes=await livePage.locator('#viewer').evaluate(el=>({
+      img:el.querySelectorAll('img').length,
+      svg:el.querySelectorAll('svg').length,
+      script:el.querySelectorAll('script').length
+    }));
+    xssCheck(liveAlerts===0,'#s= fired a JavaScript dialog');
+    xssCheck(liveNodes.img===0&&liveNodes.svg===0&&liveNodes.script===0,'#s= viewer contains an injected img, svg, or script element: '+JSON.stringify(liveNodes));
+    xssCheck(safeLiveText.includes(hostileName),'#s= hostile court/player name was not displayed as literal text');
+    xssCheck(!safeLiveText.includes(hostileNumeric),'#s= hostile numeric strings were not normalized to zero');
+    xssCheck(/#1/.test(safeLiveText),'#s= up[].p did not normalize to the fallback position');
+    xssCheck(/\n0\nCara & Dan\n9\n/.test(safeLiveText),'#s= court score did not normalize to zero');
+    xssCheck(/0-0/.test(safeLiveText),'#s= leaderboard w/l/d did not normalize to zero');
     await liveContext.close();
+
+    assert.deepEqual(xssFailures,[],'Client-side viewer XSS checks failed:\n'+xssFailures.join('\n'));
 
     // Results codes are crypto-random 10-character strings from the full 32-character alphabet.
     const codeCheck=await sp.evaluate(() => ({
