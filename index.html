@@ -56,6 +56,10 @@ button,select,input{touch-action:manipulation}
 @media(max-width:639px){
   header .container{flex-wrap:wrap;row-gap:.5rem}
   header p.text-xs{display:none}
+  /* The menu button is inserted into the brand group; let that group shrink at 320px. */
+  header .container>div:first-child{min-width:0;max-width:100%}
+  header .container>div:first-child>div:last-child{min-width:0;max-width:100%}
+  header .container>div:first-child h1{font-size:clamp(1.125rem,6vw,1.5rem);white-space:nowrap}
   #sstk span.text-\[11px\]{display:none}
 }
 
