@@ -72,12 +72,12 @@ async function setupFour(page) {
   assert.equal(await page.locator('#qc').innerText(), '4');
 }
 
-async function simulateV25ToV27(browser) {
+async function simulateV25ToV28(browser) {
   const context = await browser.newContext({...devices['Desktop Chrome'],serviceWorkers:'allow',locale:'en-US'});
   const page = await context.newPage();
   let swFetch = 0;
   const currentSw = fs.readFileSync(path.resolve('sw.js'), 'utf8');
-  assert.match(currentSw,/queuezerotwo-v27/);
+  assert.match(currentSw,/queuezerotwo-v28/);
   const oldV25 = `const V='queuezerotwo-v25';self.addEventListener('install',e=>e.waitUntil(caches.open(V).then(c=>c.put('/__queuezerotwo_v25_sentinel__',new Response('v25'))).then(()=>self.skipWaiting())));self.addEventListener('activate',e=>e.waitUntil(self.clients.claim()));`;
   await context.route('**/sw.js', async route => {
     swFetch++;
@@ -92,7 +92,7 @@ async function simulateV25ToV27(browser) {
   await page.evaluate(async()=>{const r=await navigator.serviceWorker.getRegistration();await r.update()});
   await page.waitForFunction(async()=>{
     const r=await navigator.serviceWorker.getRegistration();
-    return !!r?.waiting || await caches.has('queuezerotwo-v27');
+    return !!r?.waiting || await caches.has('queuezerotwo-v28');
   },null,{timeout:10000});
   await page.evaluate(async()=>{
     const r=await navigator.serviceWorker.getRegistration();
@@ -100,11 +100,11 @@ async function simulateV25ToV27(browser) {
   });
   await page.waitForFunction(async()=>{
     const r=await navigator.serviceWorker.getRegistration();
-    return !!r && !r.waiting && r.active?.state==='activated' && await caches.has('queuezerotwo-v27');
+    return !!r && !r.waiting && r.active?.state==='activated' && await caches.has('queuezerotwo-v28');
   },null,{timeout:10000});
   await page.reload({waitUntil:'networkidle'});
   const out=await page.evaluate(async()=>{
-    const cache=await caches.open('queuezerotwo-v27');
+    const cache=await caches.open('queuezerotwo-v28');
     return {
       queue:JSON.parse(localStorage.getItem('queuezerotwo-publish-queue-v1')||'{"items":[]}').items,
       state:JSON.parse(localStorage.getItem('pickleStackState')||'{}'),
@@ -127,7 +127,7 @@ async function simulateV26ToV27(browser) {
   const page = await context.newPage();
   let swFetch = 0;
   const currentSw = fs.readFileSync(path.resolve('sw.js'), 'utf8');
-  assert.match(currentSw,/queuezerotwo-v27/);
+  assert.match(currentSw,/queuezerotwo-v28/);
   const oldV26 = `const V='queuezerotwo-v26';self.addEventListener('install',e=>e.waitUntil(caches.open(V).then(c=>c.put('/__queuezerotwo_v26_sentinel__',new Response('v26'))).then(()=>self.skipWaiting())));self.addEventListener('activate',e=>e.waitUntil(self.clients.claim()));`;
   await context.route('**/sw.js', async route => {
     swFetch++;
@@ -142,7 +142,7 @@ async function simulateV26ToV27(browser) {
   await page.evaluate(async()=>{const r=await navigator.serviceWorker.getRegistration();await r.update()});
   await page.waitForFunction(async()=>{
     const r=await navigator.serviceWorker.getRegistration();
-    return !!r?.waiting || await caches.has('queuezerotwo-v27');
+    return !!r?.waiting || await caches.has('queuezerotwo-v28');
   },null,{timeout:10000});
   await page.evaluate(async()=>{
     const r=await navigator.serviceWorker.getRegistration();
@@ -150,11 +150,11 @@ async function simulateV26ToV27(browser) {
   });
   await page.waitForFunction(async()=>{
     const r=await navigator.serviceWorker.getRegistration();
-    return !!r && !r.waiting && r.active?.state==='activated' && await caches.has('queuezerotwo-v27');
+    return !!r && !r.waiting && r.active?.state==='activated' && await caches.has('queuezerotwo-v28');
   },null,{timeout:10000});
   await page.reload({waitUntil:'networkidle'});
   const out=await page.evaluate(async()=>{
-    const cache=await caches.open('queuezerotwo-v27');
+    const cache=await caches.open('queuezerotwo-v28');
     return {
       queue:JSON.parse(localStorage.getItem('queuezerotwo-publish-queue-v1')||'{"items":[]}').items,
       state:JSON.parse(localStorage.getItem('pickleStackState')||'{}'),
@@ -409,7 +409,7 @@ async function main() {
   const pp = await pixel.newPage();
   const syncPublishes = [];
   const resultPublishes = [];
-  await simulateV25ToV27(browser);
+  await simulateV25ToV28(browser);
   await simulateV26ToV27(browser);
   await avatarProfileRegression(browser);
   await leaderboardPodiumRegression(browser);
@@ -528,19 +528,48 @@ async function main() {
     assert.equal(snapSize.hasMike,true);
 
     // Cold-cache archived results page loads through the read-only results endpoint.
+    const hostileNumber='<img src=x onerror=alert(1)>';
     const coldContext=await browser.newContext({...devices['Desktop Chrome'],serviceWorkers:'allow',locale:'en-US'});
     await coldContext.route(SUPABASE+'/**',route=>{
       const u=new URL(route.request().url());
       if(u.pathname.endsWith('/rest/v1/pickle_results')&&route.request().method()==='GET'){
-        return route.fulfill({status:200,contentType:'application/json',body:JSON.stringify([{data:{v:1,name:'Cold cache results',totals:{players:1,games:1,courts:1},leaderboard:[{n:'Ana',w:1,l:0,d:2}],matches:[]},created_at:new Date().toISOString(),expires_at:new Date(Date.now()+30*86400000).toISOString()}])});
+        return route.fulfill({status:200,contentType:'application/json',body:JSON.stringify([{data:{v:1,name:'Cold cache results',totals:{players:hostileNumber,games:1,courts:1},leaderboard:[{n:'Ana',w:hostileNumber,l:0,d:hostileNumber}],matches:[{c:'Court 1',p:['Ana','Bob','Cara','Dan'],s:[hostileNumber,9],w:0}]},created_at:new Date().toISOString(),expires_at:new Date(Date.now()+30*86400000).toISOString()}])});
       }
       return route.abort();
     });
     const coldPage=await coldContext.newPage();
+    let coldAlerts=0;
+    coldPage.on('dialog',async dialog=>{coldAlerts++;await dialog.dismiss()});
     await coldPage.goto(APP+'#r=COLDRESULT1',{waitUntil:'networkidle'});
     await coldPage.getByText('Cold cache results',{exact:true}).waitFor({state:'visible',timeout:5000});
     await coldPage.getByText('READ-ONLY',{exact:true}).waitFor({state:'visible',timeout:5000});
+    assert.equal(coldAlerts,0);
+    assert.equal(await coldPage.locator('#viewer img').count(),0);
+    assert.match(await coldPage.locator('#viewer').innerText(),/0 players · 1 games · 1 courts/);
+    assert.match(await coldPage.locator('#viewer').innerText(),/0% win rate · 0 games · 0/);
+    assert.match(await coldPage.locator('#viewer').innerText(),/0-9/);
     await coldContext.close();
+
+    // A hostile Live View payload must remain text and malformed score/stat values must become zero.
+    const liveContext=await browser.newContext({...devices['Desktop Chrome'],serviceWorkers:'block',locale:'en-US'});
+    const livePayload={t:11,wb:2,courts:[{n:'Court 1',a:true,p:[hostileNumber,'Bob','Cara','Dan'],s:[hostileNumber,9]}],nx:[],up:[],tm:null,q:[],lb:[{n:'Ana',w:hostileNumber,l:0,d:hostileNumber}]};
+    await liveContext.route(SUPABASE+'/**',route=>{
+      const u=new URL(route.request().url());
+      if(u.pathname.endsWith('/rest/v1/live_sessions')&&route.request().method()==='GET'){
+        return route.fulfill({status:200,contentType:'application/json',body:JSON.stringify([{code:'SAFELIVE01',data:livePayload,updated_at:new Date().toISOString(),expires_at:new Date(Date.now()+86400000).toISOString()}])});
+      }
+      return route.abort();
+    });
+    const livePage=await liveContext.newPage();
+    let liveAlerts=0;
+    livePage.on('dialog',async dialog=>{liveAlerts++;await dialog.dismiss()});
+    await livePage.goto(APP+'#s=SAFELIVE01',{waitUntil:'domcontentloaded'});
+    await livePage.getByRole('heading',{name:'Live Session'}).waitFor({state:'visible',timeout:10000});
+    assert.equal(liveAlerts,0);
+    assert.equal(await livePage.locator('#viewer img').count(),0);
+    assert.match(await livePage.locator('#viewer').innerText(),/0-9/);
+    assert.match(await livePage.locator('#viewer').innerText(),/<img src=x onerror=alert\(1\)>/);
+    await liveContext.close();
 
     // Results codes are crypto-random 10-character strings from the full 32-character alphabet.
     const codeCheck=await sp.evaluate(() => ({
@@ -849,11 +878,9 @@ async function main() {
       state:{
         courts:[
           {id:1,name:hostile,isActive:false,players:[],score:[0,0],mid:'',t:0},
-          {id:2,name:'Court 2',isActive:false,players:[],score:[0,0],mid:'',t:0},
-          {id:3,name:'Court 3',isActive:false,players:[],score:[0,0],mid:'',t:0},
-          {id:4,name:'Court 4',isActive:false,players:[],score:[0,0],mid:'',t:0}
+          ...Array.from({length:11},(_,i)=>({id:i+2,name:'Court '+(i+2),isActive:false,players:[],score:[0,0],mid:'',t:0}))
         ],
-        log:[{mid:'hostile1',c:hostile,p:['Alice','Bob','Carol','Dave'],s:[11,9],w:0,t:Date.now(),d:600000,tg:11}]
+        log:[{mid:'hostile1',c:hostile,p:['Alice','Bob','Carol','Dave'],s:[11,9],t:Date.now(),d:600000,tg:11}]
       }
     }), 'utf8');
     let alerts=0;
@@ -863,7 +890,9 @@ async function main() {
     await pp.reload({waitUntil: 'networkidle'});
     await pp.locator('#imp').setInputFiles(hostilePath);
     await pp.getByRole('button', {name: 'Confirm'}).click();
-    await pp.waitForFunction(() => S.log.length === 1 && S.courts[0].name.includes('<img'), null, {timeout: 5000});
+    await pp.waitForFunction(() => S.log.length === 1 && S.courts.length === 8 && S.log[0].w === -1 && S.courts[0].name.includes('<img'), null, {timeout: 5000});
+    assert.equal(await pp.locator('#ncs').inputValue(), '8');
+    assert.deepEqual(await pp.evaluate(() => stats()), []);
     assert.equal(alerts, 0);
     assert.equal(await pp.locator('#log img').count(), 0);
     assert.equal(await pp.locator('#courts img').count(), 0);
