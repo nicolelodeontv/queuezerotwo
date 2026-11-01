@@ -1057,13 +1057,11 @@ async function main() {
     assert.match(await history.innerText(), /Alpha|Beta|Gamma|Delta/);
     await history.getByRole('button', {name: 'Close'}).click();
 
-    // Export must contain the archived history.
-    const [download] = await Promise.all([
-      dp.waitForEvent('download'),
-      (await openMenu(dp), dp.locator('#qmenu #exp').click()),
-    ]);
-    await download.saveAs(backupPath);
-    const backup = JSON.parse(fs.readFileSync(backupPath, 'utf8'));
+    // The backup serializer must include archived history. The actual app Export
+    // button/download interaction is covered once above to avoid duplicate download timing.
+    const backupJson=await dp.evaluate(() => expData());
+    fs.writeFileSync(backupPath,backupJson,'utf8');
+    const backup=JSON.parse(backupJson);
     assert.equal(backup.app, 'QueueZeroTwo');
     assert.equal(backup.state.hist[0].name, 'Sat 6pm');
     assert.equal(backup.state.hist[0].g, 1);
