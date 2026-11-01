@@ -840,6 +840,45 @@ async function main() {
     assert.match(await sp.locator('#ct').innerText(), /Sync stuck/);
     await sp.evaluate(() => {clearTimeout(PQRetry);PQRetry=null});
 
+    // Deterministic Live View/results payload validation failures must not poison the
+    // durable queue. Drop each invalid item once, notify once, then publish the valid
+    // item behind them. Ordinary transient failures remain retryable (covered above).
+    await sp.evaluate(() => {
+      const sid='VALIDATIONQ1',sh='d'.repeat(64);
+      S.ho=false;S.sid=sid;S.sh=sh;S.hoff=0;
+      PQ=[
+        {id:'invalid-live-101',seq:101,sid,sh,kind:'state',attempts:0,lastError:'',payload:{testTag:'bad-live'}},
+        {id:'invalid-results-102',seq:102,sid,sh,kind:'results',rid:'RESULTQ102',attempts:0,lastError:'',payload:{testTag:'bad-results'}},
+        {id:'valid-after-rejection-103',seq:103,sid,sh,kind:'state',attempts:0,lastError:'',payload:{testTag:'valid-next'}}
+      ];
+      PQS=103;savePublishQueue();clearTimeout(PQRetry);PQRetry=null;
+      window.__validationQueueCalls=[];
+      sb.rpc=async(name,args)=>{
+        const tag=args.p_payload?.testTag;
+        window.__validationQueueCalls.push({name,tag});
+        if(tag==='bad-live')return {error:new Error('Invalid Live View payload values.')};
+        if(tag==='bad-results')return {error:new Error('Invalid results match values.')};
+        return {data:true,error:null};
+      };
+      syncMarker();
+    });
+    await sp.evaluate(() => flushPublishQueue());
+    const validationQueueResult=await sp.evaluate(()=>({
+      queue:JSON.parse(localStorage.getItem('queuezerotwo-publish-queue-v1')||'{"items":[]}').items,
+      calls:window.__validationQueueCalls.slice(),
+      notices:[...document.querySelectorAll('#msg .mb')].map(x=>x.textContent).filter(x=>/update discarded: Invalid (Live View|results)/i.test(x))
+    }));
+    assert.equal(validationQueueResult.queue.length,0,'both invalid items are discarded and the valid item behind them drains');
+    assert.deepEqual(validationQueueResult.calls,[
+      {name:'publish_pickle_session',tag:'bad-live'},
+      {name:'publish_pickle_results_v2',tag:'bad-results'},
+      {name:'publish_pickle_session',tag:'valid-next'}
+    ]);
+    assert.equal(validationQueueResult.notices.length,2,'each rejected payload produces one visible notice');
+    assert.match(validationQueueResult.notices[0],/Live View update discarded: Invalid Live View payload values/);
+    assert.match(validationQueueResult.notices[1],/Results update discarded: Invalid results match values/);
+    await sp.evaluate(() => {clearTimeout(PQRetry);PQRetry=null});
+
     // Release 2: offline End session queues one results snapshot and only exposes its link after publish succeeds.
     await setupFour(sp);
     await sp.evaluate(() => {
