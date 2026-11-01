@@ -72,12 +72,12 @@ async function setupFour(page) {
   assert.equal(await page.locator('#qc').innerText(), '4');
 }
 
-async function simulateV25ToV27(browser) {
+async function simulateV25ToV29(browser) {
   const context = await browser.newContext({...devices['Desktop Chrome'],serviceWorkers:'allow',locale:'en-US'});
   const page = await context.newPage();
   let swFetch = 0;
   const currentSw = fs.readFileSync(path.resolve('sw.js'), 'utf8');
-  assert.match(currentSw,/queuezerotwo-v27/);
+  assert.match(currentSw,/queuezerotwo-v29/);
   const oldV25 = `const V='queuezerotwo-v25';self.addEventListener('install',e=>e.waitUntil(caches.open(V).then(c=>c.put('/__queuezerotwo_v25_sentinel__',new Response('v25'))).then(()=>self.skipWaiting())));self.addEventListener('activate',e=>e.waitUntil(self.clients.claim()));`;
   await context.route('**/sw.js', async route => {
     swFetch++;
@@ -92,7 +92,7 @@ async function simulateV25ToV27(browser) {
   await page.evaluate(async()=>{const r=await navigator.serviceWorker.getRegistration();await r.update()});
   await page.waitForFunction(async()=>{
     const r=await navigator.serviceWorker.getRegistration();
-    return !!r?.waiting || await caches.has('queuezerotwo-v27');
+    return !!r?.waiting || await caches.has('queuezerotwo-v29');
   },null,{timeout:10000});
   await page.evaluate(async()=>{
     const r=await navigator.serviceWorker.getRegistration();
@@ -100,11 +100,11 @@ async function simulateV25ToV27(browser) {
   });
   await page.waitForFunction(async()=>{
     const r=await navigator.serviceWorker.getRegistration();
-    return !!r && !r.waiting && r.active?.state==='activated' && await caches.has('queuezerotwo-v27');
+    return !!r && !r.waiting && r.active?.state==='activated' && await caches.has('queuezerotwo-v29');
   },null,{timeout:10000});
   await page.reload({waitUntil:'networkidle'});
   const out=await page.evaluate(async()=>{
-    const cache=await caches.open('queuezerotwo-v27');
+    const cache=await caches.open('queuezerotwo-v29');
     return {
       queue:JSON.parse(localStorage.getItem('queuezerotwo-publish-queue-v1')||'{"items":[]}').items,
       state:JSON.parse(localStorage.getItem('pickleStackState')||'{}'),
@@ -122,12 +122,12 @@ async function simulateV25ToV27(browser) {
   await context.close();
 }
 
-async function simulateV26ToV27(browser) {
+async function simulateV26ToV29(browser) {
   const context = await browser.newContext({...devices['Desktop Chrome'],serviceWorkers:'allow',locale:'en-US'});
   const page = await context.newPage();
   let swFetch = 0;
   const currentSw = fs.readFileSync(path.resolve('sw.js'), 'utf8');
-  assert.match(currentSw,/queuezerotwo-v27/);
+  assert.match(currentSw,/queuezerotwo-v29/);
   const oldV26 = `const V='queuezerotwo-v26';self.addEventListener('install',e=>e.waitUntil(caches.open(V).then(c=>c.put('/__queuezerotwo_v26_sentinel__',new Response('v26'))).then(()=>self.skipWaiting())));self.addEventListener('activate',e=>e.waitUntil(self.clients.claim()));`;
   await context.route('**/sw.js', async route => {
     swFetch++;
@@ -142,7 +142,7 @@ async function simulateV26ToV27(browser) {
   await page.evaluate(async()=>{const r=await navigator.serviceWorker.getRegistration();await r.update()});
   await page.waitForFunction(async()=>{
     const r=await navigator.serviceWorker.getRegistration();
-    return !!r?.waiting || await caches.has('queuezerotwo-v27');
+    return !!r?.waiting || await caches.has('queuezerotwo-v29');
   },null,{timeout:10000});
   await page.evaluate(async()=>{
     const r=await navigator.serviceWorker.getRegistration();
@@ -150,11 +150,11 @@ async function simulateV26ToV27(browser) {
   });
   await page.waitForFunction(async()=>{
     const r=await navigator.serviceWorker.getRegistration();
-    return !!r && !r.waiting && r.active?.state==='activated' && await caches.has('queuezerotwo-v27');
+    return !!r && !r.waiting && r.active?.state==='activated' && await caches.has('queuezerotwo-v29');
   },null,{timeout:10000});
   await page.reload({waitUntil:'networkidle'});
   const out=await page.evaluate(async()=>{
-    const cache=await caches.open('queuezerotwo-v27');
+    const cache=await caches.open('queuezerotwo-v29');
     return {
       queue:JSON.parse(localStorage.getItem('queuezerotwo-publish-queue-v1')||'{"items":[]}').items,
       state:JSON.parse(localStorage.getItem('pickleStackState')||'{}'),
@@ -407,10 +407,17 @@ async function main() {
   const dp = await desktop.newPage();
   const ip = await iphone.newPage();
   const pp = await pixel.newPage();
+  const debugDir=path.resolve('artifacts/playwright-debug');
+  fs.mkdirSync(debugDir,{recursive:true});
+  for (const [name,page] of [['desktop',dp],['iphone',ip],['pixel',pp]]) {
+    page.on('pageerror',error=>console.error('[Playwright pageerror '+name+']',error.stack||error));
+    page.on('console',message=>{if(message.type()==='error')console.error('[Playwright console '+name+']',message.text())});
+  }
+  await Promise.all([desktop,iphone,pixel].map(context=>context.tracing.start({screenshots:true,snapshots:true,sources:true})));
   const syncPublishes = [];
   const resultPublishes = [];
-  await simulateV25ToV27(browser);
-  await simulateV26ToV27(browser);
+  await simulateV25ToV29(browser);
+  await simulateV26ToV29(browser);
   await avatarProfileRegression(browser);
   await leaderboardPodiumRegression(browser);
   await durableQueueCompactionRegression(browser);
@@ -467,6 +474,45 @@ async function main() {
     assert.match(liveViewerText,/about 4 min/);
     assert.match(liveViewerText,/Mike R\./);
     assert.doesNotMatch(liveViewerText,/Reyes|Rivera|Lopez|Chen|Diaz/);
+
+    // The publish contract is exercised against payloads built by the real client helpers.
+    const clientPayloadContract=await sp.evaluate(()=>{
+      const oldS=S,oldSV=SV,oldV=V,oldRA=RA;
+      S=mk();
+      const names=['Ari | 東京 🌱','Mika Café|星','Noah | 🥒','Zoë 北'];
+      S.queue=names.slice(0,1);
+      S.lv={'ari | 東京 🌱':4,'mika café|星':3,'noah | 🥒':2,'zoë 北':5};
+      const empty=sdata();
+      S.queue=names.slice();
+      const populated=sdata();
+      const allNames=Array.from({length:200},(_,i)=>String(i+1).padStart(3,'0')+'|東京🌱');
+      S.log=Array.from({length:500},(_,i)=>({
+        p:[allNames[(i*4)%200],allNames[(i*4+1)%200],allNames[(i*4+2)%200],allNames[(i*4+3)%200]],
+        s:[11,9],w:0,c:'Court '+(i%8+1),tg:11,t:1760000000000+i,d:600000
+      }));
+      const results=resultsSnapshot(),bytes=new Blob([JSON.stringify(results)]).size;
+      S=oldS;SV=oldSV;V=oldV;RA=oldRA;render();
+      return {
+        empty,
+        populated,
+        results:{players:results.leaderboard.length,games:results.matches.length,bytes,hasPipe:results.matches.some(m=>m.p.some(n=>n.includes('|'))),hasUnicode:results.matches.some(m=>m.p.some(n=>n.includes('東京')))},
+        levelDataPublished:Object.hasOwn(populated,'lv')
+      };
+    });
+    assert.equal(clientPayloadContract.empty.tm,null);
+    assert.deepEqual(clientPayloadContract.empty.nx,[]);
+    assert.deepEqual(clientPayloadContract.empty.up,[]);
+    assert.ok(clientPayloadContract.empty.courts.every(c=>Array.isArray(c.p)&&c.p.length===0));
+    assert.equal(clientPayloadContract.populated.tm,null);
+    assert.equal(clientPayloadContract.populated.nx.length,4);
+    assert.equal(clientPayloadContract.populated.up.length,4);
+    assert.equal(clientPayloadContract.populated.q[0],'Ari | 東京 🌱');
+    assert.equal(clientPayloadContract.levelDataPublished,false,'skill ratings stay local and do not change the publish payload contract');
+    assert.equal(clientPayloadContract.results.players,200);
+    assert.equal(clientPayloadContract.results.games,500);
+    assert.ok(clientPayloadContract.results.bytes<200000);
+    assert.equal(clientPayloadContract.results.hasPipe,true);
+    assert.equal(clientPayloadContract.results.hasUnicode,true);
 
     // The database broadcasts data:null when an expired live session is deleted.
     // Exercise the exact callback registered on session_update and keep the last view intact.
@@ -528,19 +574,58 @@ async function main() {
     assert.equal(snapSize.hasMike,true);
 
     // Cold-cache archived results page loads through the read-only results endpoint.
+    // Exercise the client renderer with hostile text in both name and numeric fields.
+    // The numeric strings must normalize to zero, never become HTML, even when the
+    // server-side RPC guard is bypassed by this mocked GET response.
+    const hostileName='<img/src=x/onerror=alert(1)>',hostileNumeric='<svg onload=alert(1)>';
     const coldContext=await browser.newContext({...devices['Desktop Chrome'],serviceWorkers:'allow',locale:'en-US'});
     await coldContext.route(SUPABASE+'/**',route=>{
       const u=new URL(route.request().url());
       if(u.pathname.endsWith('/rest/v1/pickle_results')&&route.request().method()==='GET'){
-        return route.fulfill({status:200,contentType:'application/json',body:JSON.stringify([{data:{v:1,name:'Cold cache results',totals:{players:1,games:1,courts:1},leaderboard:[{n:'Ana',w:1,l:0,d:2}],matches:[]},created_at:new Date().toISOString(),expires_at:new Date(Date.now()+30*86400000).toISOString()}])});
+        return route.fulfill({status:200,contentType:'application/json',body:JSON.stringify([{data:{v:1,name:'Cold cache results',totals:{players:hostileNumeric,games:hostileNumeric,courts:hostileNumeric},leaderboard:[{n:hostileName,w:hostileNumeric,l:hostileNumeric,d:hostileNumeric}],matches:[{c:'Court 1',p:[hostileName,'Bob','Cara','Dan'],s:[hostileNumeric,9],w:0}]},created_at:new Date().toISOString(),expires_at:new Date(Date.now()+30*86400000).toISOString()}])});
       }
       return route.abort();
     });
     const coldPage=await coldContext.newPage();
+    let coldAlerts=0;
+    coldPage.on('dialog',async dialog=>{coldAlerts++;await dialog.dismiss()});
     await coldPage.goto(APP+'#r=COLDRESULT1',{waitUntil:'networkidle'});
     await coldPage.getByText('Cold cache results',{exact:true}).waitFor({state:'visible',timeout:5000});
     await coldPage.getByText('READ-ONLY',{exact:true}).waitFor({state:'visible',timeout:5000});
+    assert.equal(coldAlerts,0);
+    const coldText=await coldPage.locator('#viewer').innerText();
+    assert.equal(await coldPage.locator('#viewer img, #viewer svg, #viewer script').count(),0);
+    assert.ok(coldText.includes(hostileName),'the hostile player name must be rendered as literal text');
+    assert.equal(coldText.includes(hostileNumeric),false,'hostile numeric strings must normalize instead of appearing raw');
+    assert.match(coldText,/0 players · 0 games · 0 courts/);
+    assert.match(coldText,/0% win rate · 0 games · 0/);
+    assert.match(coldText,/0-9/);
     await coldContext.close();
+
+    // The #s= renderer is tested independently of the database publish guard too.
+    const liveContext=await browser.newContext({...devices['Desktop Chrome'],serviceWorkers:'block',locale:'en-US'});
+    const livePayload={t:11,wb:2,courts:[{n:'Court 1',a:true,p:[hostileName,'Bob','Cara','Dan'],s:[hostileNumeric,9]}],nx:[],up:[{n:hostileName,p:hostileNumeric}],tm:null,q:[],lb:[{n:hostileName,w:hostileNumeric,l:hostileNumeric,d:hostileNumeric}]};
+    await liveContext.route(SUPABASE+'/**',route=>{
+      const u=new URL(route.request().url());
+      if(u.pathname.endsWith('/rest/v1/live_sessions')&&route.request().method()==='GET'){
+        return route.fulfill({status:200,contentType:'application/json',body:JSON.stringify([{code:'SAFELIVE01',data:livePayload,updated_at:new Date().toISOString(),expires_at:new Date(Date.now()+86400000).toISOString()}])});
+      }
+      return route.abort();
+    });
+    const livePage=await liveContext.newPage();
+    let liveAlerts=0;
+    livePage.on('dialog',async dialog=>{liveAlerts++;await dialog.dismiss()});
+    await livePage.goto(APP+'#s=SAFELIVE01',{waitUntil:'domcontentloaded'});
+    await livePage.getByRole('heading',{name:'Live Session'}).waitFor({state:'visible',timeout:10000});
+    assert.equal(liveAlerts,0);
+    const safeLiveText=await livePage.locator('#viewer').innerText();
+    assert.equal(await livePage.locator('#viewer img, #viewer svg, #viewer script').count(),0);
+    assert.ok(safeLiveText.includes(hostileName),'the hostile player name must be rendered as literal text');
+    assert.equal(safeLiveText.includes(hostileNumeric),false,'hostile numeric strings must normalize instead of appearing raw');
+    assert.match(safeLiveText,/#1/,"an invalid Up Next position falls back to the player's display position");
+    assert.match(safeLiveText,/\n0\nCara & Dan\n9\n/);
+    assert.match(safeLiveText,/0-0/);
+    await liveContext.close();
 
     // Results codes are crypto-random 10-character strings from the full 32-character alphabet.
     const codeCheck=await sp.evaluate(() => ({
@@ -750,8 +835,7 @@ async function main() {
     await sync.setOffline(true);
     await sp.locator('#rs').click();
     const endOfflineDialog=sp.locator('[role="dialog"]');
-    const [offlineResultBackup]=await Promise.all([sp.waitForEvent('download'),endOfflineDialog.getByRole('button',{name:'Confirm'}).click()]);
-    await offlineResultBackup.delete();
+    await endOfflineDialog.getByRole('button',{name:'Confirm'}).click();
     await sp.waitForFunction(() => {
       const q=JSON.parse(localStorage.getItem('queuezerotwo-publish-queue-v1')||'{"items":[]}').items;
       return !!q.find(x=>x.kind==='results'&&x.rid&&x.rid.length===10) && S.rr===false;
@@ -767,7 +851,7 @@ async function main() {
     assert.match(readyUrlText,/#r=/);
     assert.doesNotMatch(readyUrlText,/PERSISTEDSID/);
 
-    // Release 1 regression: End session immediately downloads an import-compatible JSON backup.
+    // Release 1 regression: End Session preserves an import-compatible JSON backup payload.
     await dp.goto(APP, {waitUntil: 'networkidle'});
     await dp.locator('#tg').selectOption('15');
     await dp.locator('#wbs').selectOption('1');
@@ -785,21 +869,26 @@ async function main() {
 
     const endDialog = dp.locator('[role="dialog"]');
     await dp.locator('#rs').click();
-    const [endBackupDownload] = await Promise.all([
-      dp.waitForEvent('download'),
-      endDialog.getByRole('button', {name: 'Confirm'}).click(),
-    ]);
-    await endBackupDownload.saveAs(endBackupPath);
-    const endBackup = JSON.parse(fs.readFileSync(endBackupPath, 'utf8'));
+    await endDialog.getByRole('button', {name: 'Confirm'}).click();
+    await dp.waitForFunction(() => S.ended === true, null, {timeout: 5000});
+
+    // End Session no longer auto-downloads. Exercise the serializer directly here;
+    // the desktop Export button is covered separately by the real-click test above.
+    await dp.locator('#sn').waitFor({state:'visible',timeout:10000});
+    const endBackupJson = await dp.evaluate(() => expData());
+    fs.writeFileSync(endBackupPath,endBackupJson,'utf8');
+    const endBackup = JSON.parse(endBackupJson);
     assert.equal(endBackup.app, 'QueueZeroTwo');
     assert.equal(endBackup.version, 1);
     assert.equal(endBackup.state.ended, true);
 
-    // Close the results modal so subsequent fixture resets are not covered by it.
-    await dp.locator('.nw').click();
-    await dp.getByRole('button', {name: 'Confirm'}).click();
+    // Exercise the intended New session flow to dismiss the locked Results dialog
+    // before reusing this desktop page for unrelated queue and scoring fixtures.
+    await dp.locator('[role="dialog"]').last().getByRole('button', {name: 'New session'}).click();
+    await dp.locator('[role="dialog"]').last().getByRole('button', {name: 'Confirm'}).click();
+    await dp.locator('[role="dialog"]').waitFor({state: 'detached'});
 
-    // Restore the end-session backup to prove it remains compatible with Import.
+    // Restore the manually exported end-session backup to prove it remains compatible with Import.
     await ip.goto(APP, {waitUntil: 'networkidle'});
     await ip.evaluate(() => localStorage.clear());
     await ip.reload({waitUntil: 'networkidle'});
@@ -813,17 +902,18 @@ async function main() {
     assert.equal(await ip.locator('#wbs').inputValue(), '1');
     assert.equal(await ip.locator('#ncs').inputValue(), '6');
 
-    // Mobile-sized fallback: ending a session downloads automatically and leaves a visible Save backup action.
+    // Mobile: End Session creates the same import-compatible ended-state payload.
     await ip.evaluate(() => { localStorage.clear(); S=mk(); S.ended=false; sb.rpc=async()=>({data:true,error:null}); render(); });
     const mobileEndDialog=ip.locator('[role="dialog"]');
     await ip.locator('#rs').click();
-    const [mobileAutoBackup] = await Promise.all([
-      ip.waitForEvent('download'),
-      mobileEndDialog.getByRole('button', {name: 'Confirm'}).click(),
-    ]);
-    await mobileAutoBackup.saveAs(path.join(os.tmpdir(), 'queuezerotwo-release1-mobile-auto.json'));
-    await ip.locator('[role="dialog"] .bk').waitFor({state:'visible', timeout:5000});
-    assert.equal(await ip.locator('[role="dialog"] .bk').isVisible(), true);
+    await mobileEndDialog.getByRole('button', {name: 'Confirm'}).click();
+    await ip.locator('#sn').waitFor({state:'visible',timeout:10000});
+    const mobileBackupJsonText=await ip.evaluate(() => expData());
+    const mobileManualBackupPath=path.join(os.tmpdir(), 'queuezerotwo-release1-mobile-manual.json');
+    fs.writeFileSync(mobileManualBackupPath,mobileBackupJsonText,'utf8');
+    const mobileBackupJson=JSON.parse(mobileBackupJsonText);
+    assert.equal(mobileBackupJson.app, 'QueueZeroTwo');
+    assert.equal(mobileBackupJson.state.ended, true);
     await ip.evaluate(() => localStorage.clear());
     await ip.reload({waitUntil: 'networkidle'});
 
@@ -849,11 +939,9 @@ async function main() {
       state:{
         courts:[
           {id:1,name:hostile,isActive:false,players:[],score:[0,0],mid:'',t:0},
-          {id:2,name:'Court 2',isActive:false,players:[],score:[0,0],mid:'',t:0},
-          {id:3,name:'Court 3',isActive:false,players:[],score:[0,0],mid:'',t:0},
-          {id:4,name:'Court 4',isActive:false,players:[],score:[0,0],mid:'',t:0}
+          ...Array.from({length:11},(_,i)=>({id:i+2,name:'Court '+(i+2),isActive:false,players:[],score:[0,0],mid:'',t:0}))
         ],
-        log:[{mid:'hostile1',c:hostile,p:['Alice','Bob','Carol','Dave'],s:[11,9],w:0,t:Date.now(),d:600000,tg:11}]
+        log:[{mid:'hostile1',c:hostile,p:['Alice','Bob','Carol','Dave'],s:[11,9],t:Date.now(),d:600000,tg:11}]
       }
     }), 'utf8');
     let alerts=0;
@@ -863,7 +951,9 @@ async function main() {
     await pp.reload({waitUntil: 'networkidle'});
     await pp.locator('#imp').setInputFiles(hostilePath);
     await pp.getByRole('button', {name: 'Confirm'}).click();
-    await pp.waitForFunction(() => S.log.length === 1 && S.courts[0].name.includes('<img'), null, {timeout: 5000});
+    await pp.waitForFunction(() => S.log.length === 1 && S.courts.length === 8 && S.log[0].w === -1 && S.courts[0].name.includes('<img'), null, {timeout: 5000});
+    assert.equal(await pp.locator('#ncs').inputValue(), '8');
+    assert.deepEqual(await pp.evaluate(() => stats()), []);
     assert.equal(alerts, 0);
     assert.equal(await pp.locator('#log img').count(), 0);
     assert.equal(await pp.locator('#courts img').count(), 0);
@@ -945,15 +1035,14 @@ async function main() {
     await dp.getByRole('button', {name: 'FINISH & LOG'}).click();
     await dp.locator('#msg').getByText('Match logged.').waitFor({state:'visible', timeout:5000});
 
-    // Release 1 regression: named finished sessions auto-download a backup containing the scored log.
+    // A finished session can be serialized into a full backup for restore.
     await dp.locator('#rs').click();
     const finishDialog = dp.locator('[role="dialog"]');
-    const [finishedDownload] = await Promise.all([
-      dp.waitForEvent('download'),
-      finishDialog.getByRole('button', {name: 'Confirm'}).click(),
-    ]);
-    await finishedDownload.saveAs(finishedBackupPath);
-    const finishedBackup = JSON.parse(fs.readFileSync(finishedBackupPath, 'utf8'));
+    await finishDialog.getByRole('button', {name: 'Confirm'}).click();
+    await dp.locator('#sn').waitFor({state:'visible',timeout:10000});
+    const finishedBackupJson=await dp.evaluate(() => expData());
+    fs.writeFileSync(finishedBackupPath,finishedBackupJson,'utf8');
+    const finishedBackup=JSON.parse(finishedBackupJson);
     assert.equal(finishedBackup.app, 'QueueZeroTwo');
     assert.equal(finishedBackup.state.log.length, 1);
     assert.equal(finishedBackup.state.log[0].p.length, 4);
@@ -983,13 +1072,11 @@ async function main() {
     assert.match(await history.innerText(), /Alpha|Beta|Gamma|Delta/);
     await history.getByRole('button', {name: 'Close'}).click();
 
-    // Export must contain the archived history.
-    const [download] = await Promise.all([
-      dp.waitForEvent('download'),
-      (await openMenu(dp), dp.locator('#qmenu #exp').click()),
-    ]);
-    await download.saveAs(backupPath);
-    const backup = JSON.parse(fs.readFileSync(backupPath, 'utf8'));
+    // The backup serializer must include archived history. The actual app Export
+    // button/download interaction is covered once above to avoid duplicate download timing.
+    const backupJson=await dp.evaluate(() => expData());
+    fs.writeFileSync(backupPath,backupJson,'utf8');
+    const backup=JSON.parse(backupJson);
     assert.equal(backup.app, 'QueueZeroTwo');
     assert.equal(backup.state.hist[0].name, 'Sat 6pm');
     assert.equal(backup.state.hist[0].g, 1);
@@ -1228,6 +1315,7 @@ async function main() {
       archivedHistory: true,
       topThreeStored: true,
       exportContainsHistory: true,
+      manualExportButton: true,
       deleteWorks: true,
       importRestoresHistory: true,
       mobileScoring: true,
@@ -1239,7 +1327,15 @@ async function main() {
       realisticQueueQuotaWarning: true,
     }, null, 2));
   } finally {
-    for (const p of [backupPath, persistencePath, endBackupPath, finishedBackupPath, hostilePath, path.join(os.tmpdir(), 'queuezerotwo-release1-mobile-auto.json')]) {
+    // Preserve trace snapshots and final screenshots so a failed CI run can be debugged
+    // without needing access to the live Actions log.
+    for (const [name,page] of [['desktop',dp],['iphone',ip],['pixel',pp]]) {
+      try { await page.screenshot({path:path.join(debugDir,name+'-final.png'),fullPage:true}); } catch {}
+    }
+    for (const [name,context] of [['desktop',desktop],['iphone',iphone],['pixel',pixel]]) {
+      try { await context.tracing.stop({path:path.join(debugDir,name+'-trace.zip')}); } catch {}
+    }
+    for (const p of [backupPath, persistencePath, endBackupPath, finishedBackupPath, hostilePath, path.join(os.tmpdir(), 'queuezerotwo-release1-mobile-auto.json'),path.join(os.tmpdir(), 'queuezerotwo-release1-mobile-manual.json')]) {
       try { fs.unlinkSync(p); } catch {}
     }
     await browser.close();
