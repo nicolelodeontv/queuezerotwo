@@ -574,12 +574,15 @@ async function main() {
     assert.equal(snapSize.hasMike,true);
 
     // Cold-cache archived results page loads through the read-only results endpoint.
-    const hostileNumber='<img src=x onerror=alert(1)>',hostileObject={toString:'<svg onload=alert(1)>'};
+    // Exercise the client renderer with hostile text in both name and numeric fields.
+    // The numeric strings must normalize to zero, never become HTML, even when the
+    // server-side RPC guard is bypassed by this mocked GET response.
+    const hostileName='<img src=x onerror=alert(1)>',hostileNumeric='<svg onload=alert(1)>';
     const coldContext=await browser.newContext({...devices['Desktop Chrome'],serviceWorkers:'allow',locale:'en-US'});
     await coldContext.route(SUPABASE+'/**',route=>{
       const u=new URL(route.request().url());
       if(u.pathname.endsWith('/rest/v1/pickle_results')&&route.request().method()==='GET'){
-        return route.fulfill({status:200,contentType:'application/json',body:JSON.stringify([{data:{v:1,name:'Cold cache results',totals:{players:hostileObject,games:1,courts:1},leaderboard:[{n:'Ana',w:hostileObject,l:0,d:hostileObject}],matches:[{c:'Court 1',p:['Ana','Bob','Cara','Dan'],s:[hostileObject,9],w:0}]},created_at:new Date().toISOString(),expires_at:new Date(Date.now()+30*86400000).toISOString()}])});
+        return route.fulfill({status:200,contentType:'application/json',body:JSON.stringify([{data:{v:1,name:'Cold cache results',totals:{players:hostileNumeric,games:1,courts:1},leaderboard:[{n:hostileName,w:hostileNumeric,l:0,d:hostileNumeric}],matches:[{c:'Court 1',p:[hostileName,'Bob','Cara','Dan'],s:[hostileNumeric,9],w:0}]},created_at:new Date().toISOString(),expires_at:new Date(Date.now()+30*86400000).toISOString()}])});
       }
       return route.abort();
     });
@@ -590,15 +593,17 @@ async function main() {
     await coldPage.getByText('Cold cache results',{exact:true}).waitFor({state:'visible',timeout:5000});
     await coldPage.getByText('READ-ONLY',{exact:true}).waitFor({state:'visible',timeout:5000});
     assert.equal(coldAlerts,0);
-    assert.equal(await coldPage.locator('#viewer img').count(),0);
-    assert.match(await coldPage.locator('#viewer').innerText(),/0 players · 1 games · 1 courts/);
-    assert.match(await coldPage.locator('#viewer').innerText(),/0% win rate · 0 games · 0/);
-    assert.match(await coldPage.locator('#viewer').innerText(),/0-9/);
+    const coldText=await coldPage.locator('#viewer').innerText();
+    assert.equal(await coldPage.locator('#viewer img, #viewer svg').count(),0);
+    assert.ok(coldText.includes(hostileName),'the hostile player name must be rendered as literal text');
+    assert.match(coldText,/0 players · 1 games · 1 courts/);
+    assert.match(coldText,/0% win rate · 0 games · 0/);
+    assert.match(coldText,/0-9/);
     await coldContext.close();
 
-    // A hostile Live View payload must remain text and malformed score/stat values must become zero.
+    // The #s= renderer is tested independently of the database publish guard too.
     const liveContext=await browser.newContext({...devices['Desktop Chrome'],serviceWorkers:'block',locale:'en-US'});
-    const livePayload={t:11,wb:2,courts:[{n:'Court 1',a:true,p:[hostileNumber,'Bob','Cara','Dan'],s:[hostileObject,9]}],nx:[],up:[],tm:null,q:[],lb:[{n:'Ana',w:hostileObject,l:0,d:hostileObject}]};
+    const livePayload={t:11,wb:2,courts:[{n:'Court 1',a:true,p:[hostileName,'Bob','Cara','Dan'],s:[hostileNumeric,9]}],nx:[],up:[],tm:null,q:[],lb:[{n:hostileName,w:hostileNumeric,l:0,d:hostileNumeric}]};
     await liveContext.route(SUPABASE+'/**',route=>{
       const u=new URL(route.request().url());
       if(u.pathname.endsWith('/rest/v1/live_sessions')&&route.request().method()==='GET'){
@@ -612,10 +617,11 @@ async function main() {
     await livePage.goto(APP+'#s=SAFELIVE01',{waitUntil:'domcontentloaded'});
     await livePage.getByRole('heading',{name:'Live Session'}).waitFor({state:'visible',timeout:10000});
     assert.equal(liveAlerts,0);
-    assert.equal(await livePage.locator('#viewer img').count(),0);
     const safeLiveText=await livePage.locator('#viewer').innerText();
+    assert.equal(await livePage.locator('#viewer img, #viewer svg').count(),0);
+    assert.ok(safeLiveText.includes(hostileName),'the hostile player name must be rendered as literal text');
     assert.match(safeLiveText,/\n0\nCara & Dan\n9\n/);
-    assert.match(safeLiveText,/<img/);
+    assert.match(safeLiveText,/0-0/);
     await liveContext.close();
 
     // Results codes are crypto-random 10-character strings from the full 32-character alphabet.
