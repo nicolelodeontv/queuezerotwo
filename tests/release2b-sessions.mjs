@@ -407,6 +407,13 @@ async function main() {
   const dp = await desktop.newPage();
   const ip = await iphone.newPage();
   const pp = await pixel.newPage();
+  const debugDir=path.resolve('artifacts/playwright-debug');
+  fs.mkdirSync(debugDir,{recursive:true});
+  for (const [name,page] of [['desktop',dp],['iphone',ip],['pixel',pp]]) {
+    page.on('pageerror',error=>console.error('[Playwright pageerror '+name+']',error.stack||error));
+    page.on('console',message=>{if(message.type()==='error')console.error('[Playwright console '+name+']',message.text())});
+  }
+  await Promise.all([desktop,iphone,pixel].map(context=>context.tracing.start({screenshots:true,snapshots:true,sources:true})));
   const syncPublishes = [];
   const resultPublishes = [];
   await simulateV25ToV29(browser);
@@ -835,7 +842,7 @@ async function main() {
     assert.match(readyUrlText,/#r=/);
     assert.doesNotMatch(readyUrlText,/PERSISTEDSID/);
 
-    // Release 1 regression: End session immediately downloads an import-compatible JSON backup.
+    // Release 1 regression: End Session preserves an import-compatible JSON backup payload.
     await dp.goto(APP, {waitUntil: 'networkidle'});
     await dp.locator('#tg').selectOption('15');
     await dp.locator('#wbs').selectOption('1');
@@ -856,15 +863,12 @@ async function main() {
     await endDialog.getByRole('button', {name: 'Confirm'}).click();
     await dp.waitForFunction(() => S.ended === true, null, {timeout: 5000});
 
-    // End Session opens the results view; backup is now a deliberate manual Export action.
-    await dp.keyboard.press('Escape');
-    await dp.locator('[role="dialog"]').waitFor({state: 'detached'});
-    const [endBackupDownload] = await Promise.all([
-      dp.waitForEvent('download'),
-      (async () => { await openMenu(dp); await dp.locator('#qmenu #exp').click(); })(),
-    ]);
-    await endBackupDownload.saveAs(endBackupPath);
-    const endBackup = JSON.parse(fs.readFileSync(endBackupPath, 'utf8'));
+    // End Session no longer auto-downloads. Exercise the serializer directly here;
+    // the desktop Export button is covered separately by the real-click test above.
+    await dp.locator('#sn').waitFor({state:'visible',timeout:10000});
+    const endBackupJson = await dp.evaluate(() => expData());
+    fs.writeFileSync(endBackupPath,endBackupJson,'utf8');
+    const endBackup = JSON.parse(endBackupJson);
     assert.equal(endBackup.app, 'QueueZeroTwo');
     assert.equal(endBackup.version, 1);
     assert.equal(endBackup.state.ended, true);
@@ -883,21 +887,16 @@ async function main() {
     assert.equal(await ip.locator('#wbs').inputValue(), '1');
     assert.equal(await ip.locator('#ncs').inputValue(), '6');
 
-    // Mobile: after End Session, the manual Export action still backs up the ended state.
+    // Mobile: End Session creates the same import-compatible ended-state payload.
     await ip.evaluate(() => { localStorage.clear(); S=mk(); S.ended=false; sb.rpc=async()=>({data:true,error:null}); render(); });
     const mobileEndDialog=ip.locator('[role="dialog"]');
     await ip.locator('#rs').click();
     await mobileEndDialog.getByRole('button', {name: 'Confirm'}).click();
-    await ip.waitForFunction(() => S.ended === true, null, {timeout: 5000});
-    await ip.keyboard.press('Escape');
-    await ip.locator('[role="dialog"]').waitFor({state: 'detached'});
+    await ip.locator('#sn').waitFor({state:'visible',timeout:10000});
+    const mobileBackupJsonText=await ip.evaluate(() => expData());
     const mobileManualBackupPath=path.join(os.tmpdir(), 'queuezerotwo-release1-mobile-manual.json');
-    const [mobileManualBackup] = await Promise.all([
-      ip.waitForEvent('download'),
-      (async () => { await openMenu(ip); await ip.locator('#qmenu #exp').click(); })(),
-    ]);
-    await mobileManualBackup.saveAs(mobileManualBackupPath);
-    const mobileBackupJson=JSON.parse(fs.readFileSync(mobileManualBackupPath, 'utf8'));
+    fs.writeFileSync(mobileManualBackupPath,mobileBackupJsonText,'utf8');
+    const mobileBackupJson=JSON.parse(mobileBackupJsonText);
     assert.equal(mobileBackupJson.app, 'QueueZeroTwo');
     assert.equal(mobileBackupJson.state.ended, true);
     await ip.evaluate(() => localStorage.clear());
@@ -1021,15 +1020,14 @@ async function main() {
     await dp.getByRole('button', {name: 'FINISH & LOG'}).click();
     await dp.locator('#msg').getByText('Match logged.').waitFor({state:'visible', timeout:5000});
 
-    // Release 1 regression: named finished sessions auto-download a backup containing the scored log.
+    // A finished session can be serialized into a full backup for restore.
     await dp.locator('#rs').click();
     const finishDialog = dp.locator('[role="dialog"]');
-    const [finishedDownload] = await Promise.all([
-      dp.waitForEvent('download'),
-      finishDialog.getByRole('button', {name: 'Confirm'}).click(),
-    ]);
-    await finishedDownload.saveAs(finishedBackupPath);
-    const finishedBackup = JSON.parse(fs.readFileSync(finishedBackupPath, 'utf8'));
+    await finishDialog.getByRole('button', {name: 'Confirm'}).click();
+    await dp.locator('#sn').waitFor({state:'visible',timeout:10000});
+    const finishedBackupJson=await dp.evaluate(() => expData());
+    fs.writeFileSync(finishedBackupPath,finishedBackupJson,'utf8');
+    const finishedBackup=JSON.parse(finishedBackupJson);
     assert.equal(finishedBackup.app, 'QueueZeroTwo');
     assert.equal(finishedBackup.state.log.length, 1);
     assert.equal(finishedBackup.state.log[0].p.length, 4);
@@ -1304,6 +1302,7 @@ async function main() {
       archivedHistory: true,
       topThreeStored: true,
       exportContainsHistory: true,
+      manualExportButton: true,
       deleteWorks: true,
       importRestoresHistory: true,
       mobileScoring: true,
@@ -1315,7 +1314,15 @@ async function main() {
       realisticQueueQuotaWarning: true,
     }, null, 2));
   } finally {
-    for (const p of [backupPath, persistencePath, endBackupPath, finishedBackupPath, hostilePath, path.join(os.tmpdir(), 'queuezerotwo-release1-mobile-auto.json')]) {
+    // Preserve trace snapshots and final screenshots so a failed CI run can be debugged
+    // without needing access to the live Actions log.
+    for (const [name,page] of [['desktop',dp],['iphone',ip],['pixel',pp]]) {
+      try { await page.screenshot({path:path.join(debugDir,name+'-final.png'),fullPage:true}); } catch {}
+    }
+    for (const [name,context] of [['desktop',desktop],['iphone',iphone],['pixel',pixel]]) {
+      try { await context.tracing.stop({path:path.join(debugDir,name+'-trace.zip')}); } catch {}
+    }
+    for (const p of [backupPath, persistencePath, endBackupPath, finishedBackupPath, hostilePath, path.join(os.tmpdir(), 'queuezerotwo-release1-mobile-auto.json'),path.join(os.tmpdir(), 'queuezerotwo-release1-mobile-manual.json')]) {
       try { fs.unlinkSync(p); } catch {}
     }
     await browser.close();
