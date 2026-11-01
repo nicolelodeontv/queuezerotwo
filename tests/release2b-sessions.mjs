@@ -596,6 +596,7 @@ async function main() {
     const coldText=await coldPage.locator('#viewer').innerText();
     assert.equal(await coldPage.locator('#viewer img, #viewer svg').count(),0);
     assert.ok(coldText.includes(hostileName),'the hostile player name must be rendered as literal text');
+    assert.equal(coldText.includes(hostileNumeric),false,'hostile numeric strings must normalize instead of appearing raw');
     assert.match(coldText,/0 players · 1 games · 1 courts/);
     assert.match(coldText,/0% win rate · 0 games · 0/);
     assert.match(coldText,/0-9/);
@@ -620,6 +621,7 @@ async function main() {
     const safeLiveText=await livePage.locator('#viewer').innerText();
     assert.equal(await livePage.locator('#viewer img, #viewer svg').count(),0);
     assert.ok(safeLiveText.includes(hostileName),'the hostile player name must be rendered as literal text');
+    assert.equal(safeLiveText.includes(hostileNumeric),false,'hostile numeric strings must normalize instead of appearing raw');
     assert.match(safeLiveText,/\n0\nCara & Dan\n9\n/);
     assert.match(safeLiveText,/0-0/);
     await liveContext.close();
