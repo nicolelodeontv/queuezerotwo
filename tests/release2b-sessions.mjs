@@ -567,12 +567,12 @@ async function main() {
     assert.equal(snapSize.hasMike,true);
 
     // Cold-cache archived results page loads through the read-only results endpoint.
-    const hostileNumber='<img src=x onerror=alert(1)>';
+    const hostileNumber='<img src=x onerror=alert(1)>',hostileObject={toString:'<svg onload=alert(1)>'};
     const coldContext=await browser.newContext({...devices['Desktop Chrome'],serviceWorkers:'allow',locale:'en-US'});
     await coldContext.route(SUPABASE+'/**',route=>{
       const u=new URL(route.request().url());
       if(u.pathname.endsWith('/rest/v1/pickle_results')&&route.request().method()==='GET'){
-        return route.fulfill({status:200,contentType:'application/json',body:JSON.stringify([{data:{v:1,name:'Cold cache results',totals:{players:hostileNumber,games:1,courts:1},leaderboard:[{n:'Ana',w:hostileNumber,l:0,d:hostileNumber}],matches:[{c:'Court 1',p:['Ana','Bob','Cara','Dan'],s:[hostileNumber,9],w:0}]},created_at:new Date().toISOString(),expires_at:new Date(Date.now()+30*86400000).toISOString()}])});
+        return route.fulfill({status:200,contentType:'application/json',body:JSON.stringify([{data:{v:1,name:'Cold cache results',totals:{players:hostileObject,games:1,courts:1},leaderboard:[{n:'Ana',w:hostileObject,l:0,d:hostileObject}],matches:[{c:'Court 1',p:['Ana','Bob','Cara','Dan'],s:[hostileObject,9],w:0}]},created_at:new Date().toISOString(),expires_at:new Date(Date.now()+30*86400000).toISOString()}])});
       }
       return route.abort();
     });
@@ -591,7 +591,7 @@ async function main() {
 
     // A hostile Live View payload must remain text and malformed score/stat values must become zero.
     const liveContext=await browser.newContext({...devices['Desktop Chrome'],serviceWorkers:'block',locale:'en-US'});
-    const livePayload={t:11,wb:2,courts:[{n:'Court 1',a:true,p:[hostileNumber,'Bob','Cara','Dan'],s:[hostileNumber,9]}],nx:[],up:[],tm:null,q:[],lb:[{n:'Ana',w:hostileNumber,l:0,d:hostileNumber}]};
+    const livePayload={t:11,wb:2,courts:[{n:'Court 1',a:true,p:[hostileNumber,'Bob','Cara','Dan'],s:[hostileObject,9]}],nx:[],up:[],tm:null,q:[],lb:[{n:'Ana',w:hostileObject,l:0,d:hostileObject}]};
     await liveContext.route(SUPABASE+'/**',route=>{
       const u=new URL(route.request().url());
       if(u.pathname.endsWith('/rest/v1/live_sessions')&&route.request().method()==='GET'){
