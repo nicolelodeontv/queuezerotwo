@@ -106,6 +106,20 @@ jobs:
         env:
           APP_URL: http://127.0.0.1:4173/
         run: node tests/responsive-viewport-sweep.mjs
+      - name: Check 320px light/dark visual test syntax
+        run: node --check tests/responsive-320-themes.mjs
+      - name: Run 320px light/dark menu and layout checks
+        env:
+          APP_URL: http://127.0.0.1:4173/
+        run: node tests/responsive-320-themes.mjs
+      - name: Upload 320px theme screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: responsive-320-theme-check
+          path: artifacts/320-theme-check/
+          if-no-files-found: warn
+          retention-days: 7
       - name: Stress test 320px first-load layout with blocked and loaded fonts
         env:
           APP_URL: http://127.0.0.1:4173/
