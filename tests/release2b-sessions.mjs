@@ -478,7 +478,7 @@ async function main() {
       const empty=sdata();
       S.queue=names.slice();
       const populated=sdata();
-      const allNames=Array.from({length:200},(_,i)=>'Player '+String(i+1).padStart(3,'0')+' | 東京 🌱');
+      const allNames=Array.from({length:200},(_,i)=>String(i+1).padStart(3,'0')+'|東京🌱');
       S.log=Array.from({length:500},(_,i)=>({
         p:[allNames[(i*4)%200],allNames[(i*4+1)%200],allNames[(i*4+2)%200],allNames[(i*4+3)%200]],
         s:[11,9],w:0,c:'Court '+(i%8+1),tg:11,t:1760000000000+i,d:600000
