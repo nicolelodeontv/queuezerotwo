@@ -586,7 +586,7 @@ async function main() {
     await coldContext.route(SUPABASE+'/**',route=>{
       const u=new URL(route.request().url());
       if(u.pathname.endsWith('/rest/v1/pickle_results')&&route.request().method()==='GET'){
-        return route.fulfill({status:200,contentType:'application/json',body:JSON.stringify([{data:{v:1,name:'Cold cache results',totals:{players:hostileNumeric,games:hostileNumeric,courts:hostileNumeric},leaderboard:[{n:hostileName,w:hostileNumeric,l:hostileNumeric,d:hostileNumeric}],matches:[{c:'Court 1',p:[hostileName,'Bob','Cara','Dan'],s:[hostileNumeric,9],w:0}]},created_at:new Date().toISOString(),expires_at:new Date(Date.now()+30*86400000).toISOString()}])});
+        return route.fulfill({status:200,contentType:'application/json',body:JSON.stringify([{data:{v:1,name:'Cold cache results',totals:{players:hostileNumeric,games:hostileNumeric,courts:hostileNumeric},leaderboard:[{n:hostileName,w:hostileNumeric,l:hostileNumeric,d:hostileNumeric}],matches:[{c:'Court 1',p:[hostileName,'Bob','Cara','Dan'],s:[hostileNumeric,hostileNumeric],w:0}]},created_at:new Date().toISOString(),expires_at:new Date(Date.now()+30*86400000).toISOString()}])});
       }
       return route.abort();
     });
@@ -608,12 +608,12 @@ async function main() {
     xssCheck(!coldText.includes(hostileNumeric),'#r= hostile numeric strings were not normalized to zero');
     xssCheck(/0 players · 0 games · 0 courts/.test(coldText),'#r= totals.players/games did not normalize to zero');
     xssCheck(/0% win rate · 0 games · 0/.test(coldText),'#r= leaderboard w/l/d did not normalize to zero');
-    xssCheck(/0-9/.test(coldText),'#r= archived match score did not normalize to zero');
+    xssCheck(/0-0/.test(coldText),'#r= archived match score did not normalize to zero');
     await coldContext.close();
 
     // #s=: Live View client rendering, independent of the database publish guard.
     const liveContext=await browser.newContext({...devices['Desktop Chrome'],serviceWorkers:'block',locale:'en-US'});
-    const livePayload={t:11,wb:2,courts:[{n:'Court 1',a:true,p:[hostileName,'Bob','Cara','Dan'],s:[hostileNumeric,9]}],nx:[],up:[{n:hostileName,p:hostileNumeric}],tm:null,q:[],lb:[{n:hostileName,w:hostileNumeric,l:hostileNumeric,d:hostileNumeric}]};
+    const livePayload={t:11,wb:2,courts:[{n:'Court 1',a:true,p:[hostileName,'Bob','Cara','Dan'],s:[hostileNumeric,hostileNumeric]}],nx:[],up:[{n:hostileName,p:hostileNumeric}],tm:null,q:[],lb:[{n:hostileName,w:hostileNumeric,l:hostileNumeric,d:hostileNumeric}]};
     await liveContext.route(SUPABASE+'/**',route=>{
       const u=new URL(route.request().url());
       if(u.pathname.endsWith('/rest/v1/live_sessions')&&route.request().method()==='GET'){
@@ -637,7 +637,7 @@ async function main() {
     xssCheck(safeLiveText.includes(hostileName),'#s= hostile court/player name was not displayed as literal text');
     xssCheck(!safeLiveText.includes(hostileNumeric),'#s= hostile numeric strings were not normalized to zero');
     xssCheck(/#1/.test(safeLiveText),'#s= up[].p did not normalize to the fallback position');
-    xssCheck(/\n0\nCara & Dan\n9\n/.test(safeLiveText),'#s= court score did not normalize to zero');
+    xssCheck(/\n0\nCara & Dan\n0\n/.test(safeLiveText),'#s= court score did not normalize to zero');
     xssCheck(/0-0/.test(safeLiveText),'#s= leaderboard w/l/d did not normalize to zero');
     await liveContext.close();
 
