@@ -8,6 +8,8 @@ const VIEWPORTS = [
   [1023, 900], [1024, 800], [1279, 800], [1280, 800], [1440, 900],
   [1536, 960], [1800, 900], [1920, 1080],
 ];
+const ONLY_320 = process.argv.includes('--only-320');
+const TARGET_VIEWPORTS = ONLY_320 ? [[320, 740]] : VIEWPORTS;
 
 const browser = await chromium.launch({ headless: true });
 const context = await browser.newContext({
@@ -25,16 +27,24 @@ await context.route('**/*', route => {
 });
 
 try {
-  await page.goto(APP_URL, { waitUntil: 'domcontentloaded', timeout: 30000 });
+  await page.goto(APP_URL, { waitUntil: 'load', timeout: 30000 });
   await page.locator('#app').waitFor({ state: 'visible', timeout: 10000 });
   await page.locator('#mnb').waitFor({ state: 'attached', timeout: 5000 });
+  // initMenu runs on a zero-delay timer and moves the export/import controls into #qmenu.
+  await page.locator('#qmenu #exp').waitFor({ state: 'attached', timeout: 10000 });
+  await page.locator('#qmenu #impbtn').waitFor({ state: 'attached', timeout: 10000 });
 
   const failures = [];
   const results = [];
 
-  for (const [width, height] of VIEWPORTS) {
+  for (const [width, height] of TARGET_VIEWPORTS) {
     await page.setViewportSize({ width, height });
-    await page.evaluate(() => window.scrollTo(0, 0));
+    await page.evaluate(async () => {
+      // Wait for web fonts/icons and two paint frames after the resize before measuring.
+      await document.fonts.ready;
+      await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+      window.scrollTo(0, 0);
+    });
 
     const metrics = await page.evaluate(() => {
       const rect = el => {
@@ -57,6 +67,13 @@ try {
         class: firstOverflowingElement.getAttribute('class') || '',
         rect: rect(firstOverflowingElement),
         text: (firstOverflowingElement.innerText || firstOverflowingElement.textContent || '').replace(/\s+/g, ' ').trim().slice(0, 80),
+        children: [...firstOverflowingElement.children].map(child => ({
+          tag: child.tagName.toLowerCase(),
+          id: child.id || null,
+          class: child.getAttribute('class') || '',
+          rect: rect(child),
+          text: (child.innerText || child.textContent || '').replace(/\s+/g, ' ').trim().slice(0, 60),
+        })),
       } : null;
       return {
         width: innerWidth,
