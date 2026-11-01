@@ -86,6 +86,14 @@ jobs:
         env:
           APP_URL: http://127.0.0.1:4173/
         run: node tests/release2b-sessions.mjs
+      - name: Upload Playwright failure diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: release2b-playwright-debug
+          path: artifacts/playwright-debug/
+          if-no-files-found: warn
+          retention-days: 7
       - name: Sweep mobile, tablet, and desktop viewport widths
         env:
           APP_URL: http://127.0.0.1:4173/
