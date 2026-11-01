@@ -439,7 +439,7 @@ async function flushPublishQueue(){
         }
         // Payload validation failures are deterministic. Remove only the rejected
         // snapshot so it cannot block newer valid updates behind it.
-        if(/^(?:Invalid Live View\\b|Invalid results\\b|Payload must be a JSON object\\.?$|Payload too large\\.?$)/i.test(String(q.error.message||'').trim())){
+        if(/^(?:Invalid Live View\b|Invalid results\b|Payload must be a JSON object\.?$|Payload too large\.?$)/i.test(String(q.error.message||'').trim())){
           const failedIndex=PQ.findIndex(x=>x.id===item.id);
           if(failedIndex>=0)PQ.splice(failedIndex,1);
           savePublishQueue();syncMarker();
