@@ -437,6 +437,15 @@ async function flushPublishQueue(){
           dropPublishQueue(item.sid,item.sh);
           continue
         }
+        // Payload validation failures are deterministic. Remove only the rejected
+        // snapshot so it cannot block newer valid updates behind it.
+        if(/^(?:Invalid Live View\\b|Invalid results\\b|Payload must be a JSON object\\.?$|Payload too large\\.?$)/i.test(String(q.error.message||'').trim())){
+          const failedIndex=PQ.findIndex(x=>x.id===item.id);
+          if(failedIndex>=0)PQ.splice(failedIndex,1);
+          savePublishQueue();syncMarker();
+          toast((item.kind==='results'?'Results':'Live View')+' update discarded: '+item.lastError,'error');
+          continue
+        }
         break
       }
       const qi=PQ.findIndex(x=>x.id===item.id);if(qi>=0)PQ.splice(qi,1);savePublishQueue();syncMarker();
