@@ -46,6 +46,18 @@ try {
       const menuButton = document.querySelector('#mnb');
       const nav = document.querySelector('#nav');
       const visible = el => !!el && getComputedStyle(el).display !== 'none' && el.getClientRects().length > 0;
+      const firstOverflowingElement = [...document.querySelectorAll('body *')].find(el => {
+        const style = getComputedStyle(el);
+        if (style.display === 'none' || style.visibility === 'hidden' || el.getClientRects().length === 0) return false;
+        return el.getBoundingClientRect().right > innerWidth + 1;
+      });
+      const firstOverflowingElementInfo = firstOverflowingElement ? {
+        tag: firstOverflowingElement.tagName.toLowerCase(),
+        id: firstOverflowingElement.id || null,
+        class: firstOverflowingElement.getAttribute('class') || '',
+        rect: rect(firstOverflowingElement),
+        text: (firstOverflowingElement.innerText || firstOverflowingElement.textContent || '').replace(/\\s+/g, ' ').trim().slice(0, 80),
+      } : null;
       return {
         width: innerWidth,
         rootScrollWidth: document.documentElement.scrollWidth,
@@ -57,6 +69,7 @@ try {
         navVisible: visible(nav),
         navRect: rect(nav),
         appRect: rect(document.querySelector('#app')),
+        firstOverflowingElement: firstOverflowingElementInfo,
       };
     });
 
