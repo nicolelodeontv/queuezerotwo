@@ -161,7 +161,7 @@ select public.publish_pickle_session(
   '{"t":11,"courts":[],"nx":[],"q":["A","B","C","D"],"lb":[],"up":[{"n":"A","p":1}],"tm":{"a":240000}}'::jsonb
 );
 
-do $
+do $payload_validation$
 declare
   v_msg text;
   v_count integer;
@@ -230,7 +230,7 @@ begin
     raise exception 'invalid archived-results payloads wrote % rows',v_count;
   end if;
 end
-$;
+$payload_validation$;
 
 select public.publish_pickle_results_v2(
   'R2DB001',
