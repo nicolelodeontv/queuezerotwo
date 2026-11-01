@@ -13,7 +13,7 @@ const TARGET_VIEWPORTS = ONLY_320 ? [[320, 740]] : VIEWPORTS;
 
 const browser = await chromium.launch({ headless: true });
 const context = await browser.newContext({
-  viewport: { width: 1280, height: 800 },
+  viewport: ONLY_320 ? { width: 320, height: 740 } : { width: 1280, height: 800 },
   serviceWorkers: 'block',
   locale: 'en-US',
 });
