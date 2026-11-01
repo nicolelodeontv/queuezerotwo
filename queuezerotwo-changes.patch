@@ -1,0 +1,61 @@
+diff --git a/index.html b/index.html
+index 340d3d9..e219057 100644
+--- a/index.html
++++ b/index.html
+@@ -565,7 +565,6 @@ async function endS(){
+   if(!S.rid)S.rid=randResultCode();
+   S.rr=false;
+   const pay=resultsSnapshot();
+-  downloadBackup('End-of-session backup downloaded.');
+   if(sb){
+     if(navigator.onLine){
+       await flushPublishQueue();
+@@ -594,9 +593,8 @@ function showRes(){
+   const url=newUrl||legacyUrl,r=stats();
+   const rows=r.length?r.map((x,i)=>'<div class="flex items-center gap-3 p-3 '+(i<3?'bg-pickle-500/10':'')+'"><span class="w-8 text-center font-sport text-lg '+(i<3?'text-pickle-500':'text-gray-400')+'">'+(i<3?['🥇','🥈','🥉'][i]:i+1)+'</span><div class="flex-1 min-w-0"><div class="truncate text-white">'+esc(x.n)+'</div><div class="text-xs text-gray-400">'+Math.round(100*x.w/(x.w+x.l))+'% win rate · '+(x.w+x.l)+' games · '+(x.d>0?'+':'')+x.d+'</div></div><div class="font-sport text-2xl text-green-400">'+x.w+'</div></div>').join(''):'<p class="p-6 text-center text-sm text-gray-400">No scored matches this session.</p>';
+   const lk=url?'<div class="qrb bg-white p-3 rounded-xl mx-auto" style="width:180px;max-width:100%">'+qrSvg(url)+'</div><div class="mt-3 bg-dark-900 border border-dark-700 rounded-lg px-3 py-2 text-xs text-gray-300 break-all">'+esc(url)+'</div><button class="cp w-full mt-3 '+bS+'">Copy results link</button>':'<p class="text-sm text-gray-400">'+(S.ended?'Results link will appear when sync completes.':'Results link unavailable.')+'</p>';
+-  const d=RD=modal('<div class="p-5 border-b border-dark-700"><h3 class="text-2xl text-white">Session Results</h3><p class="text-xs text-gray-400 mb-2">Your backup should download automatically. Tap Save backup if your browser blocks the automatic download.</p><input id="sn" maxlength="40" value="'+esc(S.name||'')+'" placeholder="Name this session (e.g. Sat 6pm)" aria-label="Session name" class="mt-2 w-full bg-dark-900 border border-dark-700 rounded-lg px-3 py-2 text-sm text-white"><p class="text-xs text-gray-400">'+S.log.length+' games played · session ended</p></div><div class="divide-y divide-dark-700">'+rows+'</div><div class="p-5 border-t border-dark-700 text-center">'+lk+'</div><div class="p-4 border-t border-dark-700 grid grid-cols-2 gap-3"><button class="bk col-span-2 '+bS+'"><i class="fa-solid fa-download"></i> Save backup</button><button class="sh col-span-2 '+bP+'"><i class="fa-solid fa-image"></i> Share results image</button><button class="nw col-span-2 '+bD+'">New session</button></div>',true);
++  const d=RD=modal('<div class="p-5 border-b border-dark-700"><h3 class="text-2xl text-white">Session Results</h3><input id="sn" maxlength="40" value="'+esc(S.name||'')+'" placeholder="Name this session (e.g. Sat 6pm)" aria-label="Session name" class="mt-2 w-full bg-dark-900 border border-dark-700 rounded-lg px-3 py-2 text-sm text-white"><p class="text-xs text-gray-400">'+S.log.length+' games played · session ended</p></div><div class="divide-y divide-dark-700">'+rows+'</div><div class="p-5 border-t border-dark-700 text-center">'+lk+'</div><div class="p-4 border-t border-dark-700 grid grid-cols-2 gap-3"><button class="sh col-span-2 '+bP+'"><i class="fa-solid fa-image"></i> Share results image</button><button class="nw col-span-2 '+bD+'">New session</button></div>',true);
+   const cp=d.querySelector('.cp');if(cp)cp.onclick=async()=>{try{await navigator.clipboard.writeText(url);toast('Link copied','success')}catch(e){toast('Copy blocked by browser.','error')}};
+-  d.querySelector('.bk').onclick=()=>downloadBackup('Backup saved.');
+   d.querySelector('.sh').onclick=shareImg;d.querySelector('#sn').oninput=e=>{S.name=e.target.value.trim().slice(0,40);save();RF=null;prepImg()};
+   d.querySelector('.nw').onclick=()=>ask('Start new session?','This clears the stack, courts, leaderboard and log. Make sure you have shared the results.',()=>{d.__close();const nc=S.courts.length,k={snd:S.snd,hap:S.hap,md:S.md,ws:S.ws,wl:S.wl,eq:S.eq,tts:S.tts,target:S.target,wb:S.wb,hist:archive()};S=Object.assign(mk(),k);S.ho=false;S.hoff=0;S.sid='';S.sh='';clearPublishQueue();setCourts(nc);save();render();toast('New session started','success')})
+ }
+@@ -711,10 +709,17 @@ return `<div class="p-3 rounded-xl border ${w?'bg-pickle-500/15 border-pickle-50
+ const lvl=n=>S.lv[n.toLowerCase()]||0;
+ const pc=(a,b)=>S.log.reduce((n,l)=>n+[0,2].filter(i=>{const t=l.p.slice(i,i+2);return t.includes(a)&&t.includes(b)}).length,0);
+ const oc=(a,b)=>S.log.reduce((n,l)=>n+((l.p.slice(0,2).includes(a)&&l.p.slice(2).includes(b))||(l.p.slice(0,2).includes(b)&&l.p.slice(2).includes(a))?1:0),0);
++const pr=(a,b)=>{const n=pc(a,b);return n*n};
++const rep4=g=>Math.min(pr(g[0],g[1])+pr(g[2],g[3]),pr(g[0],g[2])+pr(g[1],g[3]),pr(g[0],g[3])+pr(g[1],g[2]));
+ function split4(g){let best,bc=1e9;[[0,1,2,3],[0,2,1,3],[0,3,1,2]].forEach((o,k)=>{const a=[g[o[0]],g[o[1]]],b=[g[o[2]],g[o[3]]];
+-let c=(pc(a[0],a[1])+pc(b[0],b[1]))*3+(((S.sd*9301+k*49297)%100)/200);
++let c=(pr(a[0],a[1])+pr(b[0],b[1]))*100+(((S.sd*9301+k*49297)%100)/200);
+ if(S.md=='bal')c+=Math.abs(lvl(a[0])+lvl(a[1])-lvl(b[0])-lvl(b[1]))*2;else a.forEach(x=>b.forEach(y=>c+=oc(x,y)));
+ if(c<bc){bc=c;best=a.concat(b)}});return best}
++/* If the next four would have to repeat a partnership, swap one of the last two for someone just behind them in the stack. The first two in line always keep their spot. */
++function refine4(ix){let best=ix.slice(0,4),bs=rep4(best.map(i=>S.queue[i]));
++if(bs>0){const extra=ix.slice(4,8),base=best.slice();
++for(let e=0;e<extra.length;e++)for(const p of [3,2]){const t=base.slice();t[p]=extra[e];const s=rep4(t.map(i=>S.queue[i]));if(s<bs){bs=s;best=t}}}
++return best.sort((a,b)=>a-b)}
+ function takeNext(){const ix=pick4(),nm4=ix.map(i=>S.queue[i]),t=split4(nm4);for(let k=ix.length-1;k>=0;k--)S.queue.splice(ix[k],1);nm4.forEach(gpi);clearWaiting(nm4);S.sd++;return t}
+ function smd(m){S.md=m;save();render()}
+ function tws(){S.ws=!S.ws;save();render()}
+@@ -798,6 +803,7 @@ const isRest=n=>!!(S.rest&&S.rest[n.toLowerCase()]);
+ const gk=n=>n.toLowerCase(),gpi=n=>{S.gp=S.gp||{};S.gp[gk(n)]=(S.gp[gk(n)]||0)+1},gpd=n=>{S.gp=S.gp||{};S.gp[gk(n)]=Math.max(0,(S.gp[gk(n)]||0)-1)};
+ function pickN(n){let ix=[];S.queue.forEach((p,i)=>{if(!isRest(p))ix.push(i)});
+ if(S.eq){S.wt=normalizeWaitTimes(S.queue,S.wt);const g=i=>(S.gp||{})[gk(S.queue[i])]||0,w=i=>Number(S.wt[wk(S.queue[i])]);ix=ix.slice().sort((a,b)=>g(a)-g(b)||w(a)-w(b)||a-b)}
++if(n===4&&ix.length>4)return refine4(ix);
+ return ix.slice(0,n).sort((a,b)=>a-b)}
+ const pick4=()=>pickN(4);
+ function rest(i){const p=S.queue[i];if(!p)return;const k=p.toLowerCase();S.rest=S.rest||{};if(S.rest[k]){delete S.rest[k];markWaiting([p])}else{S.rest[k]=1;clearWaiting([p])}save();render()}
+diff --git a/sw.js b/sw.js
+index aefe2c5..c67d5f1 100644
+--- a/sw.js
++++ b/sw.js
+@@ -1,5 +1,5 @@
+ /* QueueZeroTwo service worker. Bump V on each release to refresh the cache. Profiles are included in the app shell. */
+-const V = 'queuezerotwo-v27';
++const V = 'queuezerotwo-v28';
+ const SHELL = ['/', '/manifest.webmanifest', '/tailwind.css', '/profiles.js', '/favicon.svg', '/icon-192.png', '/icon-512.png', '/icon-maskable-512.png', '/apple-touch-icon.png'];
+ const CDN = [
+   'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js',
