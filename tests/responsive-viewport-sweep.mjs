@@ -9,6 +9,8 @@ const VIEWPORTS = [
   [1536, 960], [1800, 900], [1920, 1080],
 ];
 const ONLY_320 = process.argv.includes('--only-320');
+const FONT_MODE = process.argv.find(arg => arg.startsWith('--font-mode='))?.split('=')[1] || 'enabled';
+if (!['blocked', 'enabled'].includes(FONT_MODE)) throw new Error('Use --font-mode=blocked or --font-mode=enabled.');
 const TARGET_VIEWPORTS = ONLY_320 ? [[320, 740]] : VIEWPORTS;
 
 const browser = await chromium.launch({ headless: true });
@@ -19,10 +21,19 @@ const context = await browser.newContext({
 });
 const page = await context.newPage();
 
-// This is a layout-only test. Prevent any accidental remote database reads or writes.
+// This is a layout-only test. Prevent database access and deliberately control Google Fonts.
+const fontResponses = [];
+page.on('response', response => {
+  const url = new URL(response.url());
+  if (url.hostname === 'fonts.googleapis.com' || url.hostname === 'fonts.gstatic.com') {
+    fontResponses.push({ host: url.hostname, status: response.status() });
+  }
+});
 await context.route('**/*', route => {
   const url = new URL(route.request().url());
   if (url.hostname.endsWith('.supabase.co')) return route.abort();
+  if (FONT_MODE === 'blocked' &&
+      (url.hostname === 'fonts.googleapis.com' || url.hostname === 'fonts.gstatic.com')) return route.abort();
   return route.continue();
 });
 
@@ -34,8 +45,39 @@ try {
   await page.locator('#qmenu #exp').waitFor({ state: 'attached', timeout: 10000 });
   await page.locator('#qmenu #impbtn').waitFor({ state: 'attached', timeout: 10000 });
 
+  // Explicitly resolve the actual Oswald face rather than assuming the CSS request succeeded.
+  const fontProbe = await page.evaluate(async () => {
+    let faces = [];
+    let error = null;
+    try {
+      faces = await document.fonts.load('700 24px Oswald');
+    } catch (e) {
+      error = String(e && e.message || e);
+    }
+    await document.fonts.ready;
+    return {
+      requested: '700 24px Oswald',
+      faces: faces.map(face => ({ family: face.family, weight: face.weight, status: face.status })),
+      declaredOswaldFaces: Array.from(document.fonts)
+        .filter(face => /Oswald/i.test(face.family))
+        .map(face => ({ family: face.family, weight: face.weight, status: face.status })),
+      check: document.fonts.check('700 24px Oswald'),
+      error,
+    };
+  });
+
   const failures = [];
   const results = [];
+
+  if (FONT_MODE === 'blocked') {
+    if (fontResponses.length) failures.push({ font: 'blocked mode unexpectedly received Google Fonts responses', fontResponses });
+  } else {
+    const cssLoaded = fontResponses.some(r => r.host === 'fonts.googleapis.com' && r.status >= 200 && r.status < 300);
+    const binaryLoaded = fontResponses.some(r => r.host === 'fonts.gstatic.com' && r.status >= 200 && r.status < 300);
+    const oswaldLoaded = fontProbe.faces.some(face => /Oswald/i.test(face.family) && face.status === 'loaded');
+    if (!cssLoaded) failures.push({ font: 'Google Fonts stylesheet was not fetched successfully', fontResponses, fontProbe });
+    if (!binaryLoaded || !oswaldLoaded) failures.push({ font: 'Oswald web font did not load; enabled mode must exercise the web-font layout', fontResponses, fontProbe });
+  }
 
   for (const [width, height] of TARGET_VIEWPORTS) {
     await page.setViewportSize({ width, height });
@@ -118,7 +160,14 @@ try {
     if (problems.length) failures.push({ viewport: width + 'x' + height, problems, metrics });
   }
 
-  console.log(JSON.stringify({ test: 'responsive viewport sweep', checked: results.length, results }, null, 2));
+  console.log(JSON.stringify({
+    test: 'responsive viewport sweep',
+    fontMode: FONT_MODE,
+    fontResponses,
+    fontProbe,
+    checked: results.length,
+    results
+  }, null, 2));
   assert.deepEqual(failures, [], 'Responsive layout failed at one or more viewport sizes.');
   console.log('PASS: all responsive viewport checks passed; Supabase requests were blocked.');
 } finally {
