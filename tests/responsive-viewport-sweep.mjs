@@ -56,7 +56,7 @@ try {
         id: firstOverflowingElement.id || null,
         class: firstOverflowingElement.getAttribute('class') || '',
         rect: rect(firstOverflowingElement),
-        text: (firstOverflowingElement.innerText || firstOverflowingElement.textContent || '').replace(/\\s+/g, ' ').trim().slice(0, 80),
+        text: (firstOverflowingElement.innerText || firstOverflowingElement.textContent || '').replace(/\s+/g, ' ').trim().slice(0, 80),
       } : null;
       return {
         width: innerWidth,
