@@ -262,7 +262,7 @@ begin
   );
 
   with names as (
-    select i, 'Player '||lpad(i::text,3,'0')||' | 東京 🌱' as n
+    select i, lpad(i::text,3,'0')||'|東京🌱' as n
       from generate_series(1,200) i
   ),
   leaderboard as (
@@ -274,10 +274,10 @@ begin
       jsonb_build_object(
         'c','Court '||(((g-1)%8)+1),
         'p',jsonb_build_array(
-          'Player '||lpad((((g-1)*4+0)%200+1)::text,3,'0')||' | 東京 🌱',
-          'Player '||lpad((((g-1)*4+1)%200+1)::text,3,'0')||' | 東京 🌱',
-          'Player '||lpad((((g-1)*4+2)%200+1)::text,3,'0')||' | 東京 🌱',
-          'Player '||lpad((((g-1)*4+3)%200+1)::text,3,'0')||' | 東京 🌱'
+          lpad((((g-1)*4+0)%200+1)::text,3,'0')||'|東京🌱',
+          lpad((((g-1)*4+1)%200+1)::text,3,'0')||'|東京🌱',
+          lpad((((g-1)*4+2)%200+1)::text,3,'0')||'|東京🌱',
+          lpad((((g-1)*4+3)%200+1)::text,3,'0')||'|東京🌱'
         ),
         's',jsonb_build_array(11,9),'w',0,'tg',11,'t',1760000000000+g,'d',600000
       ) order by g
