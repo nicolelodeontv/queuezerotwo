@@ -161,6 +161,77 @@ select public.publish_pickle_session(
   '{"t":11,"courts":[],"nx":[],"q":["A","B","C","D"],"lb":[],"up":[{"n":"A","p":1}],"tm":{"a":240000}}'::jsonb
 );
 
+do $
+declare
+  v_msg text;
+  v_count integer;
+begin
+  begin
+    perform public.publish_pickle_session(
+      'R2BAD01', repeat('a',64), '[]'::jsonb
+    );
+    raise exception 'non-object session payload was accepted';
+  exception when others then
+    v_msg:=sqlerrm;
+    if v_msg <> 'Payload must be a JSON object.' then
+      raise exception 'non-object session payload unexpected error: %',v_msg;
+    end if;
+  end;
+
+  begin
+    perform public.publish_pickle_session(
+      'R2BAD02', repeat('a',64),
+      '{"t":11,"courts":[],"nx":[],"q":[5],"lb":[]}'::jsonb
+    );
+    raise exception 'non-string queue entry was accepted';
+  exception when others then
+    v_msg:=sqlerrm;
+    if v_msg <> 'Invalid Live View payload values.' then
+      raise exception 'invalid session item unexpected error: %',v_msg;
+    end if;
+  end;
+
+  select count(*) into v_count
+    from public.live_sessions
+   where code in ('R2BAD01','R2BAD02');
+  if v_count<>0 then
+    raise exception 'invalid Live View payloads wrote % rows',v_count;
+  end if;
+
+  begin
+    perform public.publish_pickle_results_v2(
+      'R2DB001', repeat('a',64), 'R2BADRES01', '[]'::jsonb
+    );
+    raise exception 'non-object results payload was accepted';
+  exception when others then
+    v_msg:=sqlerrm;
+    if v_msg <> 'Payload must be a JSON object.' then
+      raise exception 'non-object results payload unexpected error: %',v_msg;
+    end if;
+  end;
+
+  begin
+    perform public.publish_pickle_results_v2(
+      'R2DB001', repeat('a',64), 'R2BADRES02',
+      '{"v":1,"totals":{"players":1,"games":1},"leaderboard":[],"matches":[{"c":"Court 1","p":["A","B","C","D"],"s":["<img>",9],"w":0}]}'::jsonb
+    );
+    raise exception 'non-numeric results score was accepted';
+  exception when others then
+    v_msg:=sqlerrm;
+    if v_msg <> 'Invalid results match values.' then
+      raise exception 'invalid results score unexpected error: %',v_msg;
+    end if;
+  end;
+
+  select count(*) into v_count
+    from public.pickle_results
+   where live_code='R2DB001';
+  if v_count<>0 then
+    raise exception 'invalid archived-results payloads wrote % rows',v_count;
+  end if;
+end
+$;
+
 select public.publish_pickle_results_v2(
   'R2DB001',
   repeat('a',64),
