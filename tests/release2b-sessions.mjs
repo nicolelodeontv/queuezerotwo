@@ -582,7 +582,7 @@ async function main() {
     await coldContext.route(SUPABASE+'/**',route=>{
       const u=new URL(route.request().url());
       if(u.pathname.endsWith('/rest/v1/pickle_results')&&route.request().method()==='GET'){
-        return route.fulfill({status:200,contentType:'application/json',body:JSON.stringify([{data:{v:1,name:'Cold cache results',totals:{players:hostileNumeric,games:1,courts:1},leaderboard:[{n:hostileName,w:hostileNumeric,l:0,d:hostileNumeric}],matches:[{c:'Court 1',p:[hostileName,'Bob','Cara','Dan'],s:[hostileNumeric,9],w:0}]},created_at:new Date().toISOString(),expires_at:new Date(Date.now()+30*86400000).toISOString()}])});
+        return route.fulfill({status:200,contentType:'application/json',body:JSON.stringify([{data:{v:1,name:'Cold cache results',totals:{players:hostileNumeric,games:hostileNumeric,courts:hostileNumeric},leaderboard:[{n:hostileName,w:hostileNumeric,l:hostileNumeric,d:hostileNumeric}],matches:[{c:'Court 1',p:[hostileName,'Bob','Cara','Dan'],s:[hostileNumeric,9],w:0}]},created_at:new Date().toISOString(),expires_at:new Date(Date.now()+30*86400000).toISOString()}])});
       }
       return route.abort();
     });
@@ -597,14 +597,14 @@ async function main() {
     assert.equal(await coldPage.locator('#viewer img, #viewer svg').count(),0);
     assert.ok(coldText.includes(hostileName),'the hostile player name must be rendered as literal text');
     assert.equal(coldText.includes(hostileNumeric),false,'hostile numeric strings must normalize instead of appearing raw');
-    assert.match(coldText,/0 players · 1 games · 1 courts/);
+    assert.match(coldText,/0 players · 0 games · 0 courts/);
     assert.match(coldText,/0% win rate · 0 games · 0/);
     assert.match(coldText,/0-9/);
     await coldContext.close();
 
     // The #s= renderer is tested independently of the database publish guard too.
     const liveContext=await browser.newContext({...devices['Desktop Chrome'],serviceWorkers:'block',locale:'en-US'});
-    const livePayload={t:11,wb:2,courts:[{n:'Court 1',a:true,p:[hostileName,'Bob','Cara','Dan'],s:[hostileNumeric,9]}],nx:[],up:[],tm:null,q:[],lb:[{n:hostileName,w:hostileNumeric,l:0,d:hostileNumeric}]};
+    const livePayload={t:11,wb:2,courts:[{n:'Court 1',a:true,p:[hostileName,'Bob','Cara','Dan'],s:[hostileNumeric,9]}],nx:[],up:[{n:hostileName,p:hostileNumeric}],tm:null,q:[],lb:[{n:hostileName,w:hostileNumeric,l:hostileNumeric,d:hostileNumeric}]};
     await liveContext.route(SUPABASE+'/**',route=>{
       const u=new URL(route.request().url());
       if(u.pathname.endsWith('/rest/v1/live_sessions')&&route.request().method()==='GET'){
