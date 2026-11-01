@@ -7,7 +7,7 @@ Live: https://queuezerotwo.vercel.app
 ## Features
 
 - **Queue and teams:** paddle-stacking queue, a check-in list for players who have not arrived yet, skill levels, player reordering, and rest controls.
-- **Team modes:** Balanced or Social mix Up Next teams. Optional Winners stay with a configurable consecutive-win limit, plus Equal sit-outs fairness.
+- **Team modes:** Balanced or Social mix Up Next teams. Both avoid repeating partners: a repeated pair outweighs skill balance, and if the next four would have to repeat a pair, one of the last two is swapped for someone just behind them in the stack (the first two in line never lose their spot). Optional Winners stay with a configurable consecutive-win limit, plus Equal sit-outs fairness.
 - **Scoring:** play to 11, 15, or 21, with win by 1 or 2. Supports 1 to 8 courts, Undo after Finish & Log, Match Log, live standings, and podium styling for the top three leaderboard players.
 - **Sessions:** name a session, keep the last 30 in Past sessions, and share finished results through a results link or image.
 - **Players:** all-time player profiles with skill levels, match history, partner statistics, per-player backup and restore, and optional local avatars. Avatar images are cropped and resized on this device and are not uploaded to Supabase.
@@ -64,6 +64,7 @@ The real-device workflow is `.github/workflows/real-device-release1.yml`. Its no
 
 ## Development
 
+- **Pairing unit test:** `npm run test:pairing` checks the partner-avoidance logic with no browser needed.
 - **Tests:** there is no `npm test` script. The real browser regression is `.github/workflows/release2-playwright.yml`. Locally, run `npm ci`, `npm run build:css`, `npx playwright install chromium`, start a static server on port 4173, then run `APP_URL=http://127.0.0.1:4173/ node tests/release2b-sessions.mjs`. CI also checks the main inline JavaScript with `node --check`.
 - **Production deploys:** only `main` deploys to production. Vercel's ignored build step skips every other branch.
 - **Deployment quota:** production deploys count against Vercel's daily limit, so batch unrelated changes into one real PR when practical.

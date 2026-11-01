@@ -4,7 +4,8 @@
   "scripts": {
     "build:css": "tailwindcss -i ./src/input.css -o ./tailwind.css --minify",
     "build:vercel": "npm run build:css && node scripts/configure-preview.mjs",
-    "watch:css": "tailwindcss -i ./src/input.css -o ./tailwind.css --watch"
+    "watch:css": "tailwindcss -i ./src/input.css -o ./tailwind.css --watch",
+    "test:pairing": "node tests/partner-rotation.mjs"
   },
   "devDependencies": {
     "tailwindcss": "^3.4.17"

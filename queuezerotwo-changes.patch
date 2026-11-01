@@ -1,5 +1,39 @@
+diff --git a/.github/workflows/release2-playwright.yml b/.github/workflows/release2-playwright.yml
+index e878639..99d9bd6 100644
+--- a/.github/workflows/release2-playwright.yml
++++ b/.github/workflows/release2-playwright.yml
+@@ -70,6 +70,8 @@ jobs:
+           node --check /tmp/queuezerotwo-inline.js
+       - name: Check Preview configuration build script
+         run: node --check scripts/configure-preview.mjs
++      - name: Test partner rotation logic
++        run: node tests/partner-rotation.mjs
+       - name: Test Production and Preview CSP rules
+         run: node tests/vercel-config.mjs
+       - name: Test Preview backend guard
+diff --git a/README.md b/README.md
+index 1680e37..cd7084a 100644
+--- a/README.md
++++ b/README.md
+@@ -7,7 +7,7 @@ Live: https://queuezerotwo.vercel.app
+ ## Features
+ 
+ - **Queue and teams:** paddle-stacking queue, a check-in list for players who have not arrived yet, skill levels, player reordering, and rest controls.
+-- **Team modes:** Balanced or Social mix Up Next teams. Optional Winners stay with a configurable consecutive-win limit, plus Equal sit-outs fairness.
++- **Team modes:** Balanced or Social mix Up Next teams. Both avoid repeating partners: a repeated pair outweighs skill balance, and if the next four would have to repeat a pair, one of the last two is swapped for someone just behind them in the stack (the first two in line never lose their spot). Optional Winners stay with a configurable consecutive-win limit, plus Equal sit-outs fairness.
+ - **Scoring:** play to 11, 15, or 21, with win by 1 or 2. Supports 1 to 8 courts, Undo after Finish & Log, Match Log, live standings, and podium styling for the top three leaderboard players.
+ - **Sessions:** name a session, keep the last 30 in Past sessions, and share finished results through a results link or image.
+ - **Players:** all-time player profiles with skill levels, match history, partner statistics, per-player backup and restore, and optional local avatars. Avatar images are cropped and resized on this device and are not uploaded to Supabase.
+@@ -64,6 +64,7 @@ The real-device workflow is `.github/workflows/real-device-release1.yml`. Its no
+ 
+ ## Development
+ 
++- **Pairing unit test:** `npm run test:pairing` checks the partner-avoidance logic with no browser needed.
+ - **Tests:** there is no `npm test` script. The real browser regression is `.github/workflows/release2-playwright.yml`. Locally, run `npm ci`, `npm run build:css`, `npx playwright install chromium`, start a static server on port 4173, then run `APP_URL=http://127.0.0.1:4173/ node tests/release2b-sessions.mjs`. CI also checks the main inline JavaScript with `node --check`.
+ - **Production deploys:** only `main` deploys to production. Vercel's ignored build step skips every other branch.
+ - **Deployment quota:** production deploys count against Vercel's daily limit, so batch unrelated changes into one real PR when practical.
 diff --git a/index.html b/index.html
-index 340d3d9..e219057 100644
+index 340d3d9..b54334a 100644
 --- a/index.html
 +++ b/index.html
 @@ -565,7 +565,6 @@ async function endS(){
@@ -21,10 +55,24 @@ index 340d3d9..e219057 100644
    d.querySelector('.sh').onclick=shareImg;d.querySelector('#sn').oninput=e=>{S.name=e.target.value.trim().slice(0,40);save();RF=null;prepImg()};
    d.querySelector('.nw').onclick=()=>ask('Start new session?','This clears the stack, courts, leaderboard and log. Make sure you have shared the results.',()=>{d.__close();const nc=S.courts.length,k={snd:S.snd,hap:S.hap,md:S.md,ws:S.ws,wl:S.wl,eq:S.eq,tts:S.tts,target:S.target,wb:S.wb,hist:archive()};S=Object.assign(mk(),k);S.ho=false;S.hoff=0;S.sid='';S.sh='';clearPublishQueue();setCourts(nc);save();render();toast('New session started','success')})
  }
-@@ -711,10 +709,17 @@ return `<div class="p-3 rounded-xl border ${w?'bg-pickle-500/15 border-pickle-50
+@@ -709,12 +707,29 @@ return `<div class="p-3 rounded-xl border ${w?'bg-pickle-500/15 border-pickle-50
+ <button onclick="drop(${c.id})" title="Cancel match" class="sb hover:!bg-red-500 hover:!text-white"><i class="fa-solid fa-xmark"></i></button></div></div>`:
+ `<div class="bg-dark-900 rounded-2xl border border-dark-700 opacity-70 flex flex-col items-center justify-center py-10 px-5 text-center min-h-[322px]"><i class="fa-solid fa-check text-2xl text-gray-400 mb-3"></i><h3 class="text-xl text-gray-400">${esc(c.name)} <button onclick="ren(${c.id})" title="Rename" class="text-gray-400 hover:text-pickle-500 text-sm"><i class="fa-solid fa-pencil"></i></button></h3><p class="text-sm text-gray-400">Open and waiting for players.</p></div>`).join('')}
  const lvl=n=>S.lv[n.toLowerCase()]||0;
- const pc=(a,b)=>S.log.reduce((n,l)=>n+[0,2].filter(i=>{const t=l.p.slice(i,i+2);return t.includes(a)&&t.includes(b)}).length,0);
- const oc=(a,b)=>S.log.reduce((n,l)=>n+((l.p.slice(0,2).includes(a)&&l.p.slice(2).includes(b))||(l.p.slice(0,2).includes(b)&&l.p.slice(2).includes(a))?1:0),0);
+-const pc=(a,b)=>S.log.reduce((n,l)=>n+[0,2].filter(i=>{const t=l.p.slice(i,i+2);return t.includes(a)&&t.includes(b)}).length,0);
+-const oc=(a,b)=>S.log.reduce((n,l)=>n+((l.p.slice(0,2).includes(a)&&l.p.slice(2).includes(b))||(l.p.slice(0,2).includes(b)&&l.p.slice(2).includes(a))?1:0),0);
++/* Partner/opponent history, counted once per log change instead of on every call. Names are matched case-insensitively. */
++let PCC=null;
++const pkey=(a,b)=>a<b?a+'\u0001'+b:b+'\u0001'+a;
++function pairMaps(){const L=S.log,last=L[L.length-1];
++if(PCC&&PCC.l===L&&PCC.n===L.length&&PCC.e===last)return PCC;
++const p=new Map(),o=new Map(),bump=(m,k)=>m.set(k,(m.get(k)||0)+1);
++L.forEach(l=>{if(!l||!Array.isArray(l.p)||l.p.length<4)return;const q=l.p.map(x=>String(x).toLowerCase());
++bump(p,pkey(q[0],q[1]));bump(p,pkey(q[2],q[3]));
++[0,1].forEach(i=>[2,3].forEach(j=>bump(o,pkey(q[i],q[j]))))});
++return PCC={l:L,n:L.length,e:last,p,o}}
++const pc=(a,b)=>pairMaps().p.get(pkey(String(a).toLowerCase(),String(b).toLowerCase()))||0;
++const oc=(a,b)=>pairMaps().o.get(pkey(String(a).toLowerCase(),String(b).toLowerCase()))||0;
 +const pr=(a,b)=>{const n=pc(a,b);return n*n};
 +const rep4=g=>Math.min(pr(g[0],g[1])+pr(g[2],g[3]),pr(g[0],g[2])+pr(g[1],g[3]),pr(g[0],g[3])+pr(g[1],g[2]));
  function split4(g){let best,bc=1e9;[[0,1,2,3],[0,2,1,3],[0,3,1,2]].forEach((o,k)=>{const a=[g[o[0]],g[o[1]]],b=[g[o[2]],g[o[3]]];
@@ -40,7 +88,7 @@ index 340d3d9..e219057 100644
  function takeNext(){const ix=pick4(),nm4=ix.map(i=>S.queue[i]),t=split4(nm4);for(let k=ix.length-1;k>=0;k--)S.queue.splice(ix[k],1);nm4.forEach(gpi);clearWaiting(nm4);S.sd++;return t}
  function smd(m){S.md=m;save();render()}
  function tws(){S.ws=!S.ws;save();render()}
-@@ -798,6 +803,7 @@ const isRest=n=>!!(S.rest&&S.rest[n.toLowerCase()]);
+@@ -798,6 +813,7 @@ const isRest=n=>!!(S.rest&&S.rest[n.toLowerCase()]);
  const gk=n=>n.toLowerCase(),gpi=n=>{S.gp=S.gp||{};S.gp[gk(n)]=(S.gp[gk(n)]||0)+1},gpd=n=>{S.gp=S.gp||{};S.gp[gk(n)]=Math.max(0,(S.gp[gk(n)]||0)-1)};
  function pickN(n){let ix=[];S.queue.forEach((p,i)=>{if(!isRest(p))ix.push(i)});
  if(S.eq){S.wt=normalizeWaitTimes(S.queue,S.wt);const g=i=>(S.gp||{})[gk(S.queue[i])]||0,w=i=>Number(S.wt[wk(S.queue[i])]);ix=ix.slice().sort((a,b)=>g(a)-g(b)||w(a)-w(b)||a-b)}
@@ -48,6 +96,20 @@ index 340d3d9..e219057 100644
  return ix.slice(0,n).sort((a,b)=>a-b)}
  const pick4=()=>pickN(4);
  function rest(i){const p=S.queue[i];if(!p)return;const k=p.toLowerCase();S.rest=S.rest||{};if(S.rest[k]){delete S.rest[k];markWaiting([p])}else{S.rest[k]=1;clearWaiting([p])}save();render()}
+diff --git a/package.json b/package.json
+index 5a2133e..889dd51 100644
+--- a/package.json
++++ b/package.json
+@@ -4,7 +4,8 @@
+   "scripts": {
+     "build:css": "tailwindcss -i ./src/input.css -o ./tailwind.css --minify",
+     "build:vercel": "npm run build:css && node scripts/configure-preview.mjs",
+-    "watch:css": "tailwindcss -i ./src/input.css -o ./tailwind.css --watch"
++    "watch:css": "tailwindcss -i ./src/input.css -o ./tailwind.css --watch",
++    "test:pairing": "node tests/partner-rotation.mjs"
+   },
+   "devDependencies": {
+     "tailwindcss": "^3.4.17"
 diff --git a/sw.js b/sw.js
 index aefe2c5..c67d5f1 100644
 --- a/sw.js
@@ -59,3 +121,65 @@ index aefe2c5..c67d5f1 100644
  const SHELL = ['/', '/manifest.webmanifest', '/tailwind.css', '/profiles.js', '/favicon.svg', '/icon-192.png', '/icon-512.png', '/icon-maskable-512.png', '/apple-touch-icon.png'];
  const CDN = [
    'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js',
+diff --git a/tests/partner-rotation.mjs b/tests/partner-rotation.mjs
+new file mode 100644
+index 0000000..3e20d1c
+--- /dev/null
++++ b/tests/partner-rotation.mjs
+@@ -0,0 +1,56 @@
++// Unit test for partner-repeat avoidance. No browser or dependencies needed.
++// Pulls the pairing code straight out of index.html so it can't drift from the app.
++import assert from 'node:assert/strict';
++import { readFileSync } from 'node:fs';
++
++const html = readFileSync(new URL('../index.html', import.meta.url), 'utf8');
++const start = html.indexOf('let PCC=null;');
++const end = html.indexOf('function takeNext');
++assert.ok(start > 0 && end > start, 'pairing code not found in index.html');
++
++const api = new Function(
++  'S0',
++  'let S=S0;const lvl=n=>S.lv[n.toLowerCase()]||0;' +
++    html.slice(start, end) +
++    ';return {get S(){return S},set S(v){S=v},pc,oc,split4,refine4,rep4}'
++);
++
++function fresh(n, md = 'bal') {
++  return { log: [], queue: Array.from({ length: n }, (_, i) => 'P' + i), lv: {}, md, sd: 0 };
++}
++const A = api(fresh(8));
++
++// 1. Counts are case-insensitive and cached results refresh when the log changes.
++A.S = fresh(8);
++assert.equal(A.pc('P0', 'P1'), 0);
++A.S.log.push({ p: ['P0', 'P1', 'P2', 'P3'], w: 0, s: [11, 5] });
++assert.equal(A.pc('p0', 'P1'), 1, 'partner count should ignore case');
++assert.equal(A.pc('P0', 'P2'), 0, 'opponents are not partners');
++assert.equal(A.oc('P0', 'p3'), 1, 'opponent count should ignore case');
++A.S.log.pop();
++assert.equal(A.pc('P0', 'P1'), 0, 'undo must clear the cached count');
++
++// 2. Full rotation: with enough players, nobody repeats a partner while avoidable.
++for (const [n, games] of [[8, 4], [9, 6], [10, 7]]) {
++  A.S = fresh(n);
++  let repeats = 0;
++  for (let g = 0; g < games; g++) {
++    const ix = A.S.queue.length > 4 ? A.refine4(A.S.queue.map((_, i) => i)) : [0, 1, 2, 3];
++    assert.equal(new Set(ix).size, 4, 'four distinct players');
++    assert.ok(ix.includes(0) && ix.includes(1), 'first two in line keep their spot');
++    const t = A.split4(ix.map(i => A.S.queue[i]));
++    if (A.pc(t[0], t[1]) || A.pc(t[2], t[3])) repeats++;
++    A.S.log.push({ p: t, w: 0, s: [11, 5] });
++    for (let k = ix.length - 1; k >= 0; k--) A.S.queue.splice(ix[k], 1);
++    A.S.queue.push(...t);
++    A.S.sd++;
++  }
++  assert.equal(repeats, 0, `${n} players, ${games} games: partners repeated`);
++}
++
++// 3. A repeat that is truly unavoidable (exactly 4 players) must not crash.
++A.S = fresh(4);
++A.S.log.push({ p: ['P0', 'P1', 'P2', 'P3'], w: 0, s: [11, 5] });
++const t = A.split4(A.S.queue);
++assert.equal(t.length, 4);
++console.log('partner-rotation: all checks passed');
