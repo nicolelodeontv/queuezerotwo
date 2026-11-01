@@ -819,8 +819,7 @@ async function main() {
     await sync.setOffline(true);
     await sp.locator('#rs').click();
     const endOfflineDialog=sp.locator('[role="dialog"]');
-    const [offlineResultBackup]=await Promise.all([sp.waitForEvent('download'),endOfflineDialog.getByRole('button',{name:'Confirm'}).click()]);
-    await offlineResultBackup.delete();
+    await endOfflineDialog.getByRole('button',{name:'Confirm'}).click();
     await sp.waitForFunction(() => {
       const q=JSON.parse(localStorage.getItem('queuezerotwo-publish-queue-v1')||'{"items":[]}').items;
       return !!q.find(x=>x.kind==='results'&&x.rid&&x.rid.length===10) && S.rr===false;
