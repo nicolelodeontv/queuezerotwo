@@ -86,6 +86,14 @@ jobs:
         env:
           APP_URL: http://127.0.0.1:4173/
         run: node tests/release2b-sessions.mjs
+      - name: Check Nyork two-browser integration test syntax
+        run: node --check tests/nyork-two-browser-live.mjs
+      - name: Run Nyork real-backend two-browser host/viewer test
+        env:
+          APP_URL: http://127.0.0.1:4173/
+          NYORK_SUPABASE_URL: https://yeytqiyhosoyuassjcef.supabase.co
+          NYORK_SUPABASE_PUBLISHABLE_KEY: sb_publishable_k41MPtlaBwnddBd6QIutTQ_kMWbeN7T
+        run: node tests/nyork-two-browser-live.mjs
       - name: Upload Playwright failure diagnostics
         if: failure()
         uses: actions/upload-artifact@v4
