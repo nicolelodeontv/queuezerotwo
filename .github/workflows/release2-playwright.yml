@@ -98,12 +98,17 @@ jobs:
         env:
           APP_URL: http://127.0.0.1:4173/
         run: node tests/responsive-viewport-sweep.mjs
-      - name: Stress test 320px first-load layout (15 isolated runs)
+      - name: Stress test 320px first-load layout with blocked and loaded fonts
         env:
           APP_URL: http://127.0.0.1:4173/
         shell: bash
         run: |
           for attempt in $(seq 1 15); do
-            echo "320px isolated load $attempt/15"
-            node tests/responsive-viewport-sweep.mjs --only-320 || exit $?
+            if (( attempt % 2 == 1 )); then
+              font_mode=blocked
+            else
+              font_mode=enabled
+            fi
+            echo "320px cold load $attempt/15 (Google Fonts: $font_mode)"
+            node tests/responsive-viewport-sweep.mjs --only-320 --font-mode="$font_mode" || exit $?
           done
