@@ -72,12 +72,12 @@ async function setupFour(page) {
   assert.equal(await page.locator('#qc').innerText(), '4');
 }
 
-async function simulateV25ToV28(browser) {
+async function simulateV25ToV29(browser) {
   const context = await browser.newContext({...devices['Desktop Chrome'],serviceWorkers:'allow',locale:'en-US'});
   const page = await context.newPage();
   let swFetch = 0;
   const currentSw = fs.readFileSync(path.resolve('sw.js'), 'utf8');
-  assert.match(currentSw,/queuezerotwo-v28/);
+  assert.match(currentSw,/queuezerotwo-v29/);
   const oldV25 = `const V='queuezerotwo-v25';self.addEventListener('install',e=>e.waitUntil(caches.open(V).then(c=>c.put('/__queuezerotwo_v25_sentinel__',new Response('v25'))).then(()=>self.skipWaiting())));self.addEventListener('activate',e=>e.waitUntil(self.clients.claim()));`;
   await context.route('**/sw.js', async route => {
     swFetch++;
@@ -92,7 +92,7 @@ async function simulateV25ToV28(browser) {
   await page.evaluate(async()=>{const r=await navigator.serviceWorker.getRegistration();await r.update()});
   await page.waitForFunction(async()=>{
     const r=await navigator.serviceWorker.getRegistration();
-    return !!r?.waiting || await caches.has('queuezerotwo-v28');
+    return !!r?.waiting || await caches.has('queuezerotwo-v29');
   },null,{timeout:10000});
   await page.evaluate(async()=>{
     const r=await navigator.serviceWorker.getRegistration();
@@ -100,11 +100,11 @@ async function simulateV25ToV28(browser) {
   });
   await page.waitForFunction(async()=>{
     const r=await navigator.serviceWorker.getRegistration();
-    return !!r && !r.waiting && r.active?.state==='activated' && await caches.has('queuezerotwo-v28');
+    return !!r && !r.waiting && r.active?.state==='activated' && await caches.has('queuezerotwo-v29');
   },null,{timeout:10000});
   await page.reload({waitUntil:'networkidle'});
   const out=await page.evaluate(async()=>{
-    const cache=await caches.open('queuezerotwo-v28');
+    const cache=await caches.open('queuezerotwo-v29');
     return {
       queue:JSON.parse(localStorage.getItem('queuezerotwo-publish-queue-v1')||'{"items":[]}').items,
       state:JSON.parse(localStorage.getItem('pickleStackState')||'{}'),
@@ -122,12 +122,12 @@ async function simulateV25ToV28(browser) {
   await context.close();
 }
 
-async function simulateV26ToV28(browser) {
+async function simulateV26ToV29(browser) {
   const context = await browser.newContext({...devices['Desktop Chrome'],serviceWorkers:'allow',locale:'en-US'});
   const page = await context.newPage();
   let swFetch = 0;
   const currentSw = fs.readFileSync(path.resolve('sw.js'), 'utf8');
-  assert.match(currentSw,/queuezerotwo-v28/);
+  assert.match(currentSw,/queuezerotwo-v29/);
   const oldV26 = `const V='queuezerotwo-v26';self.addEventListener('install',e=>e.waitUntil(caches.open(V).then(c=>c.put('/__queuezerotwo_v26_sentinel__',new Response('v26'))).then(()=>self.skipWaiting())));self.addEventListener('activate',e=>e.waitUntil(self.clients.claim()));`;
   await context.route('**/sw.js', async route => {
     swFetch++;
@@ -142,7 +142,7 @@ async function simulateV26ToV28(browser) {
   await page.evaluate(async()=>{const r=await navigator.serviceWorker.getRegistration();await r.update()});
   await page.waitForFunction(async()=>{
     const r=await navigator.serviceWorker.getRegistration();
-    return !!r?.waiting || await caches.has('queuezerotwo-v28');
+    return !!r?.waiting || await caches.has('queuezerotwo-v29');
   },null,{timeout:10000});
   await page.evaluate(async()=>{
     const r=await navigator.serviceWorker.getRegistration();
@@ -150,11 +150,11 @@ async function simulateV26ToV28(browser) {
   });
   await page.waitForFunction(async()=>{
     const r=await navigator.serviceWorker.getRegistration();
-    return !!r && !r.waiting && r.active?.state==='activated' && await caches.has('queuezerotwo-v28');
+    return !!r && !r.waiting && r.active?.state==='activated' && await caches.has('queuezerotwo-v29');
   },null,{timeout:10000});
   await page.reload({waitUntil:'networkidle'});
   const out=await page.evaluate(async()=>{
-    const cache=await caches.open('queuezerotwo-v28');
+    const cache=await caches.open('queuezerotwo-v29');
     return {
       queue:JSON.parse(localStorage.getItem('queuezerotwo-publish-queue-v1')||'{"items":[]}').items,
       state:JSON.parse(localStorage.getItem('pickleStackState')||'{}'),
@@ -409,8 +409,8 @@ async function main() {
   const pp = await pixel.newPage();
   const syncPublishes = [];
   const resultPublishes = [];
-  await simulateV25ToV28(browser);
-  await simulateV26ToV28(browser);
+  await simulateV25ToV29(browser);
+  await simulateV26ToV29(browser);
   await avatarProfileRegression(browser);
   await leaderboardPodiumRegression(browser);
   await durableQueueCompactionRegression(browser);
@@ -467,6 +467,45 @@ async function main() {
     assert.match(liveViewerText,/about 4 min/);
     assert.match(liveViewerText,/Mike R\./);
     assert.doesNotMatch(liveViewerText,/Reyes|Rivera|Lopez|Chen|Diaz/);
+
+    // The publish contract is exercised against payloads built by the real client helpers.
+    const clientPayloadContract=await sp.evaluate(()=>{
+      const oldS=S,oldSV=SV,oldV=V,oldRA=RA;
+      S=mk();
+      const names=['Ari | 東京 🌱','Mika Café|星','Noah | 🥒','Zoë 北'];
+      S.queue=names.slice(0,1);
+      S.lv={'ari | 東京 🌱':4,'mika café|星':3,'noah | 🥒':2,'zoë 北':5};
+      const empty=sdata();
+      S.queue=names.slice();
+      const populated=sdata();
+      const allNames=Array.from({length:200},(_,i)=>'Player '+String(i+1).padStart(3,'0')+' | 東京 🌱');
+      S.log=Array.from({length:500},(_,i)=>({
+        p:[allNames[(i*4)%200],allNames[(i*4+1)%200],allNames[(i*4+2)%200],allNames[(i*4+3)%200]],
+        s:[11,9],w:0,c:'Court '+(i%8+1),tg:11,t:1760000000000+i,d:600000
+      }));
+      const results=resultsSnapshot(),bytes=new Blob([JSON.stringify(results)]).size;
+      S=oldS;SV=oldSV;V=oldV;RA=oldRA;render();
+      return {
+        empty,
+        populated,
+        results:{players:results.leaderboard.length,games:results.matches.length,bytes,hasPipe:results.matches.some(m=>m.p.some(n=>n.includes('|'))),hasUnicode:results.matches.some(m=>m.p.some(n=>n.includes('東京')))},
+        levelDataPublished:Object.hasOwn(populated,'lv')
+      };
+    });
+    assert.equal(clientPayloadContract.empty.tm,null);
+    assert.deepEqual(clientPayloadContract.empty.nx,[]);
+    assert.deepEqual(clientPayloadContract.empty.up,[]);
+    assert.ok(clientPayloadContract.empty.courts.every(c=>Array.isArray(c.p)&&c.p.length===0));
+    assert.equal(clientPayloadContract.populated.tm,null);
+    assert.equal(clientPayloadContract.populated.nx.length,4);
+    assert.equal(clientPayloadContract.populated.up.length,4);
+    assert.equal(clientPayloadContract.populated.q[0],'Ari | 東京 🌱');
+    assert.equal(clientPayloadContract.levelDataPublished,false,'skill ratings stay local and do not change the publish payload contract');
+    assert.equal(clientPayloadContract.results.players,200);
+    assert.equal(clientPayloadContract.results.games,500);
+    assert.ok(clientPayloadContract.results.bytes<200000);
+    assert.equal(clientPayloadContract.results.hasPipe,true);
+    assert.equal(clientPayloadContract.results.hasUnicode,true);
 
     // The database broadcasts data:null when an expired live session is deleted.
     // Exercise the exact callback registered on session_update and keep the last view intact.
@@ -567,8 +606,9 @@ async function main() {
     await livePage.getByRole('heading',{name:'Live Session'}).waitFor({state:'visible',timeout:10000});
     assert.equal(liveAlerts,0);
     assert.equal(await livePage.locator('#viewer img').count(),0);
-    assert.match(await livePage.locator('#viewer').innerText(),/0-9/);
-    assert.match(await livePage.locator('#viewer').innerText(),/<img src=x onerror=alert\(1\)>/);
+    const safeLiveText=await livePage.locator('#viewer').innerText();
+    assert.match(safeLiveText,/\n0\nCara & Dan\n9\n/);
+    assert.match(safeLiveText,/<img/);
     await liveContext.close();
 
     // Results codes are crypto-random 10-character strings from the full 32-character alphabet.
