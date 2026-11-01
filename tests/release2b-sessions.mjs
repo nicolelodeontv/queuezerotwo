@@ -122,7 +122,7 @@ async function simulateV25ToV28(browser) {
   await context.close();
 }
 
-async function simulateV26ToV27(browser) {
+async function simulateV26ToV28(browser) {
   const context = await browser.newContext({...devices['Desktop Chrome'],serviceWorkers:'allow',locale:'en-US'});
   const page = await context.newPage();
   let swFetch = 0;
@@ -410,7 +410,7 @@ async function main() {
   const syncPublishes = [];
   const resultPublishes = [];
   await simulateV25ToV28(browser);
-  await simulateV26ToV27(browser);
+  await simulateV26ToV28(browser);
   await avatarProfileRegression(browser);
   await leaderboardPodiumRegression(browser);
   await durableQueueCompactionRegression(browser);
