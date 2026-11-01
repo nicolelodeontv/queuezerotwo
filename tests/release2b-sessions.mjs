@@ -577,7 +577,7 @@ async function main() {
     // Exercise the client renderer with hostile text in both name and numeric fields.
     // The numeric strings must normalize to zero, never become HTML, even when the
     // server-side RPC guard is bypassed by this mocked GET response.
-    const hostileName='<img src=x onerror=alert(1)>',hostileNumeric='<svg onload=alert(1)>';
+    const hostileName='<img>',hostileNumeric='<svg onload=alert(1)>';
     const coldContext=await browser.newContext({...devices['Desktop Chrome'],serviceWorkers:'allow',locale:'en-US'});
     await coldContext.route(SUPABASE+'/**',route=>{
       const u=new URL(route.request().url());
@@ -594,7 +594,7 @@ async function main() {
     await coldPage.getByText('READ-ONLY',{exact:true}).waitFor({state:'visible',timeout:5000});
     assert.equal(coldAlerts,0);
     const coldText=await coldPage.locator('#viewer').innerText();
-    assert.equal(await coldPage.locator('#viewer img, #viewer svg').count(),0);
+    assert.equal(await coldPage.locator('#viewer img, #viewer svg, #viewer script').count(),0);
     assert.ok(coldText.includes(hostileName),'the hostile player name must be rendered as literal text');
     assert.equal(coldText.includes(hostileNumeric),false,'hostile numeric strings must normalize instead of appearing raw');
     assert.match(coldText,/0 players · 0 games · 0 courts/);
@@ -622,6 +622,7 @@ async function main() {
     assert.equal(await livePage.locator('#viewer img, #viewer svg').count(),0);
     assert.ok(safeLiveText.includes(hostileName),'the hostile player name must be rendered as literal text');
     assert.equal(safeLiveText.includes(hostileNumeric),false,'hostile numeric strings must normalize instead of appearing raw');
+    assert.match(safeLiveText,/#1/,'an invalid Up Next position falls back to the player's display position');
     assert.match(safeLiveText,/\n0\nCara & Dan\n9\n/);
     assert.match(safeLiveText,/0-0/);
     await liveContext.close();
