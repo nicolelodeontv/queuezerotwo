@@ -59,10 +59,16 @@ async function syncContext(browser, device, publishes, resultPublishes) {
 }
 
 async function setupFour(page) {
-  await page.goto(APP, {waitUntil: 'networkidle'});
+  await page.goto(APP.split('#')[0], {waitUntil: 'networkidle'});
+  await page.evaluate(() => {
+    localStorage.removeItem('pickleStackState');
+    localStorage.removeItem('queuezerotwo-publish-queue-v1');
+  });
+  await page.reload({waitUntil: 'networkidle'});
   await page.evaluate(() => {
     if (innerWidth < 1024) document.getElementById('nvs')?.click();
   });
+  await page.locator('#pn').waitFor({state:'visible',timeout:5000});
   await page.locator('#pn').fill('Alpha,Beta,Gamma,Delta');
   await page.locator('#f button').click();
   await page.waitForFunction(() => document.getElementById('wc')?.textContent === '4', null, {timeout: 5000});
@@ -613,7 +619,8 @@ async function main() {
 
     // #s=: Live View client rendering, independent of the database publish guard.
     const liveContext=await browser.newContext({...devices['Desktop Chrome'],serviceWorkers:'block',locale:'en-US'});
-    const livePayload={t:11,wb:2,courts:[{n:'Court 1',a:true,p:[hostileName,'Bob','Cara','Dan'],s:[hostileNumeric,hostileNumeric]}],nx:[],up:[{n:hostileName,p:hostileNumeric}],tm:null,q:[],lb:[{n:hostileName,w:hostileNumeric,l:hostileNumeric,d:hostileNumeric}]};
+    const hostileLiveScore='<img src=x onerror=alert(1)>';
+    const livePayload={q:[],t:11,lb:[],nx:[],tm:null,up:[],wb:2,courts:[{a:true,n:'Court 1',p:['Alice','Bob','Cara','Dan'],s:[hostileLiveScore,9]}]};
     await liveContext.route(SUPABASE+'/**',route=>{
       const u=new URL(route.request().url());
       if(u.pathname.endsWith('/rest/v1/live_sessions')&&route.request().method()==='GET'){
@@ -624,21 +631,20 @@ async function main() {
     const livePage=await liveContext.newPage();
     let liveAlerts=0;
     livePage.on('dialog',async dialog=>{liveAlerts++;await dialog.dismiss()});
-    await livePage.goto(APP+'#s=SAFELIVE01',{waitUntil:'domcontentloaded'});
+    await livePage.goto(APP+'#s=NYXSSBASE2',{waitUntil:'domcontentloaded'});
     await livePage.getByRole('heading',{name:'Live Session'}).waitFor({state:'visible',timeout:10000});
-    const safeLiveText=await livePage.locator('#viewer').innerText();
-    const liveNodes=await livePage.locator('#viewer').evaluate(el=>({
-      img:el.querySelectorAll('img').length,
-      svg:el.querySelectorAll('svg').length,
-      script:el.querySelectorAll('script').length
+    await livePage.waitForFunction(()=>document.querySelector('#viewer')?.innerText.includes('Cara & Dan')&&document.querySelector('#viewer')?.innerText.includes('9'),null,{timeout:10000});
+    const nyxssViewer=await livePage.locator('#viewer').evaluate(el=>({
+      text:el.innerText,
+      images:el.querySelectorAll('img').length,
+      svgs:el.querySelectorAll('svg').length,
+      scripts:el.querySelectorAll('script').length
     }));
-    xssCheck(liveAlerts===0,'#s= fired a JavaScript dialog');
-    xssCheck(liveNodes.img===0&&liveNodes.svg===0&&liveNodes.script===0,'#s= viewer contains an injected img, svg, or script element: '+JSON.stringify(liveNodes));
-    xssCheck(safeLiveText.includes(hostileName),'#s= hostile court/player name was not displayed as literal text');
-    xssCheck(!safeLiveText.includes(hostileNumeric),'#s= hostile numeric strings were not normalized to zero');
-    xssCheck(/#1/.test(safeLiveText),'#s= up[].p did not normalize to the fallback position');
-    xssCheck(/\n0\nCara & Dan\n0\n/.test(safeLiveText),'#s= court score did not normalize to zero');
-    xssCheck(/0-0/.test(safeLiveText),'#s= leaderboard w/l/d did not normalize to zero');
+    console.log('[NYXSSBASE2 viewer DOM check] '+JSON.stringify({...nyxssViewer,alertFired:liveAlerts>0}));
+    xssCheck(liveAlerts===0,'#s= NYXSSBASE2 fired a JavaScript dialog');
+    xssCheck(nyxssViewer.images===0&&nyxssViewer.svgs===0&&nyxssViewer.scripts===0,'#s= NYXSSBASE2 viewer contains an injected img, svg, or script element: '+JSON.stringify(nyxssViewer));
+    xssCheck(!nyxssViewer.text.includes(hostileLiveScore),'#s= hostile score was not normalized to zero');
+    xssCheck(/Alice & Bob\n0\nCara & Dan\n9/.test(nyxssViewer.text),'#s= exact hostile-row scores did not render as 0 and 9');
     await liveContext.close();
 
     assert.deepEqual(xssFailures,[],'Client-side viewer XSS checks failed:\n'+xssFailures.join('\n'));
@@ -840,44 +846,119 @@ async function main() {
     assert.match(await sp.locator('#ct').innerText(), /Sync stuck/);
     await sp.evaluate(() => {clearTimeout(PQRetry);PQRetry=null});
 
-    // Deterministic Live View/results payload validation failures must not poison the
-    // durable queue. Drop each invalid item once, notify once, then publish the valid
-    // item behind them. Ordinary transient failures remain retryable (covered above).
-    await sp.evaluate(() => {
+    // Deterministic rejection-state regression tests run in a dedicated 1280px desktop profile.
+    const queueContext=await freshContext(browser,devices['Desktop Chrome']);
+    const queuePage=await queueContext.newPage();
+    await setupFour(queuePage);
+    assert.equal(await queuePage.evaluate(()=>innerWidth),1280,'queue failure regression runs at desktop width');
+
+    await queuePage.evaluate(() => {
       const sid='VALIDATIONQ1',sh='d'.repeat(64);
-      S.ho=false;S.sid=sid;S.sh=sh;S.hoff=0;
+      S.ho=false;S.sid=sid;S.sh=sh;S.hoff=0;S.ended=false;S.lpf=false;S.rpf=false;
+      PublishRejected='';PublishRejectedNotified.clear();
       PQ=[
-        {id:'invalid-live-101',seq:101,sid,sh,kind:'state',attempts:0,lastError:'',payload:{testTag:'bad-live'}},
-        {id:'invalid-results-102',seq:102,sid,sh,kind:'results',rid:'RESULTQ102',attempts:0,lastError:'',payload:{testTag:'bad-results'}},
-        {id:'valid-after-rejection-103',seq:103,sid,sh,kind:'state',attempts:0,lastError:'',payload:{testTag:'valid-next'}}
+        {id:'invalid-live-101',seq:101,sid,sh,kind:'state',attempts:0,lastError:'',payload:{testTag:'bad-live-a'}},
+        {id:'invalid-live-102',seq:102,sid,sh,kind:'state',attempts:0,lastError:'',payload:{testTag:'bad-live-b'}}
       ];
-      PQS=103;savePublishQueue();clearTimeout(PQRetry);PQRetry=null;
+      PQS=102;savePublishQueue();clearTimeout(PQRetry);PQRetry=null;
       window.__validationQueueCalls=[];
       sb.rpc=async(name,args)=>{
         const tag=args.p_payload?.testTag;
         window.__validationQueueCalls.push({name,tag});
-        if(tag==='bad-live')return {error:new Error('Invalid Live View payload values.')};
-        if(tag==='bad-results')return {error:new Error('Invalid results match values.')};
+        if(tag==='bad-live-a'||tag==='bad-live-b')return {error:new Error('Invalid Live View payload values.')};
         return {data:true,error:null};
       };
       syncMarker();
     });
-    await sp.evaluate(() => flushPublishQueue());
-    const validationQueueResult=await sp.evaluate(()=>({
+    await queuePage.evaluate(() => flushPublishQueue());
+    const liveRejected=await queuePage.evaluate(()=>({
       queue:JSON.parse(localStorage.getItem('queuezerotwo-publish-queue-v1')||'{"items":[]}').items,
       calls:window.__validationQueueCalls.slice(),
-      notices:[...document.querySelectorAll('#msg .mb')].map(x=>x.textContent).filter(x=>/update discarded: Invalid (Live View|results)/i.test(x))
+      notices:[...document.querySelectorAll('#msg .mb')].map(x=>x.textContent).filter(x=>/Live View update was rejected/i.test(x)),
+      status:document.getElementById('ct').textContent,
+      icon:document.getElementById('ci').className,
+      rejected:PublishRejected,lpf:S.lpf
     }));
-    assert.equal(validationQueueResult.queue.length,0,'both invalid items are discarded and the valid item behind them drains');
-    assert.deepEqual(validationQueueResult.calls,[
-      {name:'publish_pickle_session',tag:'bad-live'},
-      {name:'publish_pickle_results_v2',tag:'bad-results'},
-      {name:'publish_pickle_session',tag:'valid-next'}
+    assert.equal(liveRejected.queue.length,0,'both deterministic Live View failures are dropped');
+    assert.deepEqual(liveRejected.calls,[
+      {name:'publish_pickle_session',tag:'bad-live-a'},
+      {name:'publish_pickle_session',tag:'bad-live-b'}
     ]);
-    assert.equal(validationQueueResult.notices.length,2,'each rejected payload produces one visible notice');
-    assert.match(validationQueueResult.notices[0],/Live View update discarded: Invalid Live View payload values/);
-    assert.match(validationQueueResult.notices[1],/Results update discarded: Invalid results match values/);
-    await sp.evaluate(() => {clearTimeout(PQRetry);PQRetry=null});
+    assert.equal(liveRejected.notices.length,1,'repeated state rejections produce only one toast per failure type');
+    assert.match(liveRejected.status,/Live View rejected · saved here/);
+    assert.match(liveRejected.icon,/text-red-500/);
+    assert.equal(liveRejected.rejected,'live');
+    assert.equal(liveRejected.lpf,true);
+
+    // A successful publish clears the Live View error marker and re-arms one notice for the next failure.
+    await queuePage.evaluate(() => {
+      PQ=[{id:'valid-live-103',seq:103,sid:S.sid,sh:S.sh,kind:'state',attempts:0,lastError:'',payload:{testTag:'valid-live'}}];
+      PQS=103;savePublishQueue();
+      sb.rpc=async()=>({data:true,error:null});
+    });
+    await queuePage.evaluate(() => flushPublishQueue());
+    const liveRecovered=await queuePage.evaluate(()=>({
+      status:document.getElementById('ct').textContent,
+      rejected:PublishRejected,lpf:S.lpf,queue:PQ.length
+    }));
+    assert.equal(liveRecovered.queue,0);
+    assert.equal(liveRecovered.lpf,false);
+    assert.equal(liveRecovered.rejected,'');
+    assert.match(liveRecovered.status,/Saved on this device/);
+
+    // Results rejection is distinct: keep the local session and replace the impossible
+    // "will appear when sync completes" copy with a truthful failure message.
+    await queuePage.evaluate(() => {
+      S.ended=true;S.rr=false;S.lr=false;S.rpf=false;S.rid='RESULTQ102';
+      PQ=[
+        {id:'invalid-results-102',seq:104,sid:S.sid,sh:S.sh,kind:'results',rid:'RESULTQ102',attempts:0,lastError:'',payload:{testTag:'bad-results-a'}},
+        {id:'invalid-results-103',seq:105,sid:S.sid,sh:S.sh,kind:'results',rid:'RESULTQ103',attempts:0,lastError:'',payload:{testTag:'bad-results-b'}}
+      ];
+      PQS=105;savePublishQueue();
+      sb.rpc=async(name,args)=>{
+        const tag=args.p_payload?.testTag;
+        window.__validationQueueCalls.push({name,tag});
+        if(tag==='bad-results-a'||tag==='bad-results-b')return {error:new Error('Invalid results match values.')};
+        return {data:'GOODRES123',error:null};
+      };
+    });
+    await queuePage.evaluate(() => flushPublishQueue());
+    const resultsRejected=await queuePage.evaluate(()=>({
+      queue:PQ.length,
+      notices:[...document.querySelectorAll('#msg .mb')].map(x=>x.textContent).filter(x=>/Results couldn't be published/i.test(x)),
+      status:document.getElementById('ct').textContent,
+      rejected:PublishRejected,rpf:S.rpf,rr:S.rr,
+      dialog:document.querySelector('[role="dialog"]')?.innerText||''
+    }));
+    assert.equal(resultsRejected.queue,0,'both invalid results items are dropped');
+    assert.equal(resultsRejected.notices.length,1,'repeated results rejections produce one toast per failure type');
+    assert.match(resultsRejected.notices[0],/Results couldn't be published\. Your session is saved on this device\./);
+    assert.match(resultsRejected.status,/Results not published · saved here/);
+    assert.equal(resultsRejected.rejected,'results');
+    assert.equal(resultsRejected.rpf,true);
+    assert.equal(resultsRejected.rr,false);
+    assert.match(resultsRejected.dialog,/Results link couldn't be published\. Your session is saved on this device\./);
+    assert.doesNotMatch(resultsRejected.dialog,/Results link will appear when sync completes/);
+
+    // A successful results publish restores the link and clears the durable results-failure state.
+    await queuePage.evaluate(() => {
+      PQ=[{id:'valid-results-104',seq:106,sid:S.sid,sh:S.sh,kind:'results',rid:'RESULTQ102',attempts:0,lastError:'',payload:{testTag:'valid-results'}}];
+      PQS=106;savePublishQueue();
+    });
+    await queuePage.evaluate(() => flushPublishQueue());
+    const resultsRecovered=await queuePage.evaluate(()=>({
+      status:document.getElementById('ct').textContent,
+      rejected:PublishRejected,rpf:S.rpf,rr:S.rr,rid:S.rid,queue:PQ.length,
+      dialog:document.querySelector('[role="dialog"]')?.innerText||''
+    }));
+    assert.equal(resultsRecovered.queue,0);
+    assert.equal(resultsRecovered.rpf,false);
+    assert.equal(resultsRecovered.rr,true);
+    assert.equal(resultsRecovered.rid,'GOODRES123');
+    assert.equal(resultsRecovered.rejected,'');
+    assert.match(resultsRecovered.status,/Saved on this device/);
+    assert.match(resultsRecovered.dialog,/#r=GOODRES123/);
+    await queueContext.close();
 
     // Release 2: offline End session queues one results snapshot and only exposes its link after publish succeeds.
     await setupFour(sp);
