@@ -977,7 +977,7 @@ const upItems=Array.isArray(d.up)?d.up:[];
 const lbData=Array.isArray(d.lb)?d.lb:[];
 const nameMap=displayNameMap([courtsData.flatMap(c=>Array.isArray(c.p)?c.p:[]),queueData,nextNames,upItems.map(x=>x&&x.n).filter(Boolean),lbData.map(x=>x&&x.n).filter(Boolean)]);
 const player=n=>safePlayerName(n,nameMap);
-const pair=(p,i)=>esc((Array.isArray(p)?p:[]).slice(i*2,i*2+2).map(player).join(' & '));
+const pair=(p,i)=>(Array.isArray(p)?p:[]).slice(i*2,i*2+2).map(player).join(' & ');
 const target=num(d.t)||11;
 const courts=courtsData.map(c=>{
   const scores=Array.isArray(c.s)?[num(c.s[0]),num(c.s[1])]:[0,0];
