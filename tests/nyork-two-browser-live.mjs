@@ -117,14 +117,38 @@ async function main() {
     assert.match(resultsCode, /^[A-Z2-9]{10}$/);
     assert.equal(ended.success, true, 'Nyork Results publish must succeed');
 
-    await viewer.goto(APP + '#r=' + resultsCode, {waitUntil: 'domcontentloaded'});
-    await viewer.waitForFunction(() => {
-      const text = document.querySelector('#viewer')?.innerText || '';
-      return text.includes('Nyork two-browser QA') && text.includes('Alice & Bob') && text.includes('11-9');
-    }, null, {timeout: 15000});
-    const resultsViewerText = await viewer.locator('#viewer').innerText();
-    assert.match(resultsViewerText, /Nyork two-browser QA/);
-    assert.match(resultsViewerText, /11-9/);
+    // Use a fresh viewer page rather than switching hashes in the Live View page:
+    // the app reloads on hashchange, so a separate page avoids racing the reload.
+    const resultsViewer = await viewerContext.newPage();
+    const resultsApiResponses = [];
+    resultsViewer.on('response', async response => {
+      if (!response.url().includes('/rest/v1/pickle_results')) return;
+      let body = '';
+      try { body = (await response.text()).slice(0, 1200); } catch {}
+      resultsApiResponses.push({status:response.status(),body});
+    });
+    resultsViewer.on('requestfailed', request => {
+      if (request.url().includes('/rest/v1/pickle_results')) {
+        resultsApiResponses.push({failed:request.failure()?.errorText || 'request failed'});
+      }
+    });
+    await resultsViewer.goto(APP + '#r=' + resultsCode, {waitUntil: 'domcontentloaded'});
+    await resultsViewer.waitForFunction(() => !!(RA?.d || RA?.missing), null, {timeout: 15000});
+    const archivedPageState = await resultsViewer.evaluate(() => ({
+      code: RA?.code || null,
+      missing: !!RA?.missing,
+      data: RA?.d || null,
+      text: document.querySelector('#viewer')?.innerText || ''
+    }));
+    console.log('[NYORK ARCHIVED VIEWER] ' + JSON.stringify({
+      pageState:archivedPageState,
+      responses:resultsApiResponses
+    }));
+    assert.equal(archivedPageState.code, resultsCode);
+    assert.equal(archivedPageState.missing, false, 'Results row must be readable to the anonymous viewer');
+    assert.ok(archivedPageState.data, 'Archived viewer must receive a saved Results object');
+    assert.match(archivedPageState.text, /Nyork two-browser QA/);
+    assert.match(archivedPageState.text, /11-9/);
 
     console.log('[NYORK TWO-BROWSER PASS] ' + JSON.stringify({
       hostBrowser: 'Desktop Chrome',
