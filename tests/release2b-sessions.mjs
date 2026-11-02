@@ -583,7 +583,7 @@ async function main() {
     // Exercise the client renderer with hostile text in both name and numeric fields.
     // The numeric strings must normalize to zero, never become HTML, even when the
     // server-side RPC guard is bypassed by this mocked GET response.
-    const hostileName='<img/src=x/onerror=alert(1)>',hostileNumeric='<svg/onload=alert(1)>';
+    const hostileResultsName='<img/src=x/onerror=alert(1)>',hostileNumeric='<svg/onload=alert(2)>';
     const xssFailures=[];
     const xssCheck=(pass,message)=>{if(!pass)xssFailures.push(message)};
 
@@ -592,7 +592,7 @@ async function main() {
     await coldContext.route(SUPABASE+'/**',route=>{
       const u=new URL(route.request().url());
       if(u.pathname.endsWith('/rest/v1/pickle_results')&&route.request().method()==='GET'){
-        return route.fulfill({status:200,contentType:'application/json',body:JSON.stringify([{data:{v:1,name:'Cold cache results',totals:{players:hostileNumeric,games:hostileNumeric,courts:hostileNumeric},leaderboard:[{n:hostileName,w:hostileNumeric,l:hostileNumeric,d:hostileNumeric}],matches:[{c:'Court 1',p:[hostileName,'Bob','Cara','Dan'],s:[hostileNumeric,hostileNumeric],w:0}]},created_at:new Date().toISOString(),expires_at:new Date(Date.now()+30*86400000).toISOString()}])});
+        return route.fulfill({status:200,contentType:'application/json',body:JSON.stringify([{data:{v:1,name:'Cold cache results',totals:{players:hostileNumeric,games:hostileNumeric,courts:hostileNumeric},leaderboard:[{n:hostileResultsName,w:hostileNumeric,l:hostileNumeric,d:hostileNumeric}],matches:[{c:'Court 1',p:[hostileResultsName,'Bob','Cara','Dan'],s:[hostileNumeric,hostileNumeric],w:0}]},created_at:new Date().toISOString(),expires_at:new Date(Date.now()+30*86400000).toISOString()}])});
       }
       return route.abort();
     });
@@ -610,7 +610,7 @@ async function main() {
     }));
     xssCheck(coldAlerts===0,'#r= fired a JavaScript dialog');
     xssCheck(coldNodes.img===0&&coldNodes.svg===0&&coldNodes.script===0,'#r= viewer contains an injected img, svg, or script element: '+JSON.stringify(coldNodes));
-    xssCheck(coldText.includes(hostileName),'#r= hostile player name was not displayed as literal text');
+    xssCheck(coldText.includes(hostileResultsName),'#r= hostile player name was not displayed as literal text');
     xssCheck(!coldText.includes(hostileNumeric),'#r= hostile numeric strings were not normalized to zero');
     xssCheck(/0 players · 0 games · 0 courts/.test(coldText),'#r= totals.players/games did not normalize to zero');
     xssCheck(/0% win rate · 0 games · 0/.test(coldText),'#r= leaderboard w/l/d did not normalize to zero');
@@ -619,8 +619,10 @@ async function main() {
 
     // #s=: Live View client rendering, independent of the database publish guard.
     const liveContext=await browser.newContext({...devices['Desktop Chrome'],serviceWorkers:'block',locale:'en-US'});
+    const hostileName='<img/src/onerror=alert(1)>';
     const hostileLiveScore='<img src=x onerror=alert(1)>';
-    const livePayload={q:[],t:11,lb:[],nx:[],tm:null,up:[],wb:2,courts:[{a:true,n:'Court 1',p:['Alice','Bob','Cara','Dan'],s:[hostileLiveScore,9]}]};
+    const hostileLiveEvent='<svg/onload=alert(2)>';
+    const livePayload={q:[],t:11,lb:[],nx:[],tm:null,up:[],wb:2,courts:[{a:true,n:'Court 1',p:[hostileName,'Bob','Cara','Dan'],s:[hostileLiveScore,9]},{a:true,n:'Court 2',p:[hostileLiveEvent,'Eve','Fox','Gray'],s:[7,5]}]};
     await liveContext.route(SUPABASE+'/**',route=>{
       const u=new URL(route.request().url());
       if(u.pathname.endsWith('/rest/v1/live_sessions')&&route.request().method()==='GET'){
@@ -629,22 +631,27 @@ async function main() {
       return route.abort();
     });
     const livePage=await liveContext.newPage();
-    let liveAlerts=0;
-    livePage.on('dialog',async dialog=>{liveAlerts++;await dialog.dismiss()});
+    const liveDialogs=[];
+    livePage.on('dialog',async dialog=>{liveDialogs.push(dialog.message());await dialog.dismiss()});
     await livePage.goto(APP+'#s=NYXSSBASE2',{waitUntil:'domcontentloaded'});
     await livePage.getByRole('heading',{name:'Live Session'}).waitFor({state:'visible',timeout:10000});
     await livePage.waitForFunction(()=>document.querySelector('#viewer')?.innerText.includes('Cara & Dan')&&document.querySelector('#viewer')?.innerText.includes('9'),null,{timeout:10000});
+    await livePage.waitForFunction(()=>{const images=[...document.querySelectorAll('#viewer img')];return images.length===0||images.every(image=>image.complete)},null,{timeout:5000});
+    await livePage.waitForTimeout(50);
     const nyxssViewer=await livePage.locator('#viewer').evaluate(el=>({
       text:el.innerText,
       images:el.querySelectorAll('img').length,
+      imageDetails:[...el.querySelectorAll('img')].map(image=>({html:image.outerHTML,complete:image.complete,naturalWidth:image.naturalWidth,onerrorType:typeof image.onerror})),
       svgs:el.querySelectorAll('svg').length,
       scripts:el.querySelectorAll('script').length
     }));
-    console.log('[NYXSSBASE2 viewer DOM check] '+JSON.stringify({...nyxssViewer,alertFired:liveAlerts>0}));
-    xssCheck(liveAlerts===0,'#s= NYXSSBASE2 fired a JavaScript dialog');
+    console.log('[NYXSSBASE2 viewer DOM check] '+JSON.stringify({...nyxssViewer,dialogs:liveDialogs}));
+    xssCheck(liveDialogs.length===0,'#s= NYXSSBASE2 fired a JavaScript dialog: '+JSON.stringify(liveDialogs));
     xssCheck(nyxssViewer.images===0&&nyxssViewer.svgs===0&&nyxssViewer.scripts===0,'#s= NYXSSBASE2 viewer contains an injected img, svg, or script element: '+JSON.stringify(nyxssViewer));
+    xssCheck(nyxssViewer.text.includes(hostileName),'#s= hostile player name was not displayed as literal text');
+    xssCheck(nyxssViewer.text.includes(hostileLiveEvent+' & Eve\n7\nFox & Gray\n5'),'#s= hostile SVG player name was not displayed as literal text');
     xssCheck(!nyxssViewer.text.includes(hostileLiveScore),'#s= hostile score was not normalized to zero');
-    xssCheck(/Alice & Bob\n0\nCara & Dan\n9/.test(nyxssViewer.text),'#s= exact hostile-row scores did not render as 0 and 9');
+    xssCheck(nyxssViewer.text.includes(hostileName+' & Bob\n0\nCara & Dan\n9'),'#s= hostile player name and hostile score did not render as literal text and zero');
     await liveContext.close();
 
     assert.deepEqual(xssFailures,[],'Client-side viewer XSS checks failed:\n'+xssFailures.join('\n'));
