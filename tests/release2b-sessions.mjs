@@ -1126,13 +1126,13 @@ async function main() {
 
     // Context 3: hostile backup must remain inert and render as text.
     const hostile='<img src=x onerror=alert(1)>';
-    const hostileName='<img/src=x/onerror=alert(1)>';
+    const hostileSessionName='<img/src=x/onerror=alert(1)>';
     fs.writeFileSync(hostilePath, JSON.stringify({
       app:'QueueZeroTwo',
       version:1,
       exportedAt:new Date().toISOString(),
       state:{
-        name:hostileName,
+        name:hostileSessionName,
         courts:[
           {id:1,name:hostile,isActive:false,players:[],score:[0,0],mid:'',t:0},
           ...Array.from({length:11},(_,i)=>({id:i+2,name:'Court '+(i+2),isActive:false,players:[],score:[0,0],mid:'',t:0}))
@@ -1154,12 +1154,12 @@ async function main() {
     assert.equal(await pp.locator('#log img').count(), 0);
     assert.equal(await pp.locator('#courts img').count(), 0);
     assert.match(await pp.locator('#log').innerText(), /<img src=x onerror=/);
-    await pp.waitForFunction(name=>S.name===name,hostileName,{timeout:5000});
+    await pp.waitForFunction(name=>S.name===name,hostileSessionName,{timeout:5000});
     await pp.locator('#rs').click();
     const hostileEndDialog=pp.locator('[role="dialog"]').last();
     await hostileEndDialog.getByRole('button',{name:'Confirm'}).click();
     await pp.locator('#sn').waitFor({state:'visible',timeout:5000});
-    assert.equal(await pp.locator('#sn').inputValue(),hostileName,'Restored hostile name stays literal in the Results dialog');
+    assert.equal(await pp.locator('#sn').inputValue(),hostileSessionName,'Restored hostile name stays literal in the Results dialog');
     await pp.waitForTimeout(100);
     assert.equal(await pp.locator('img[onerror],img[src="x"],svg[onload]').count(),0,'Hostile session name creates no injected elements');
     assert.equal(alerts,0,'Hostile session name triggers no JavaScript dialog');
