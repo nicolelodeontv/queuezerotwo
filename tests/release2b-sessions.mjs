@@ -1186,10 +1186,17 @@ async function main() {
     const resultsDialog=dp.locator('[role="dialog"]').last();
     const exportButton=resultsDialog.getByRole('button',{name:'Export backup'});
     assert.equal(await exportButton.count(),1,'The Results dialog exposes one Export backup action');
+    let resultsExportPublishCalls=0;
+    const trackResultsExportPublish=request=>{
+      if(request.url().includes('/rpc/publish_pickle_'))resultsExportPublishCalls++;
+    };
+    dp.on('request',trackResultsExportPublish);
     const [resultsDownload]=await Promise.all([
       dp.waitForEvent('download'),
       exportButton.click(),
     ]);
+    dp.off('request',trackResultsExportPublish);
+    assert.equal(resultsExportPublishCalls,0,'Exporting from Results must not call a publish RPC');
     assert.match(resultsDownload.suggestedFilename(),/^queuezerotwo-backup-\d{4}-\d{2}-\d{2}\.json$/);
     await resultsDownload.saveAs(finishedBackupPath);
     const finishedBackup=JSON.parse(fs.readFileSync(finishedBackupPath,'utf8'));
