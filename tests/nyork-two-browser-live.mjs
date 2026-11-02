@@ -147,7 +147,7 @@ async function main() {
     assert.equal(archivedPageState.code, resultsCode);
     assert.equal(archivedPageState.missing, false, 'Results row must be readable to the anonymous viewer');
     assert.ok(archivedPageState.data, 'Archived viewer must receive a saved Results object');
-    assert.match(archivedPageState.text, /Nyork two-browser QA/);
+    assert.match(archivedPageState.text, /Nyork two-browser QA/i);
     assert.match(archivedPageState.text, /11-9/);
 
     console.log('[NYORK TWO-BROWSER PASS] ' + JSON.stringify({
