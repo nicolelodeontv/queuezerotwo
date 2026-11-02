@@ -583,7 +583,7 @@ async function main() {
     // Exercise the client renderer with hostile text in both name and numeric fields.
     // The numeric strings must normalize to zero, never become HTML, even when the
     // server-side RPC guard is bypassed by this mocked GET response.
-    const hostileResultsName='<img/src=x/onerror=alert(1)>',hostileNumeric='<svg/onload=alert(1)>';
+    const hostileResultsName='<img/src=x/onerror=alert(1)>',hostileNumeric='<svg/onload=alert(2)>';
     const xssFailures=[];
     const xssCheck=(pass,message)=>{if(!pass)xssFailures.push(message)};
 
