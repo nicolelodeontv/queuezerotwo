@@ -1126,11 +1126,13 @@ async function main() {
 
     // Context 3: hostile backup must remain inert and render as text.
     const hostile='<img src=x onerror=alert(1)>';
+    const hostileName='<img/src=x/onerror=alert(1)>';
     fs.writeFileSync(hostilePath, JSON.stringify({
       app:'QueueZeroTwo',
       version:1,
       exportedAt:new Date().toISOString(),
       state:{
+        name:hostileName,
         courts:[
           {id:1,name:hostile,isActive:false,players:[],score:[0,0],mid:'',t:0},
           ...Array.from({length:11},(_,i)=>({id:i+2,name:'Court '+(i+2),isActive:false,players:[],score:[0,0],mid:'',t:0}))
@@ -1152,6 +1154,15 @@ async function main() {
     assert.equal(await pp.locator('#log img').count(), 0);
     assert.equal(await pp.locator('#courts img').count(), 0);
     assert.match(await pp.locator('#log').innerText(), /<img src=x onerror=/);
+    await pp.waitForFunction(name=>S.name===name,hostileName,{timeout:5000});
+    await pp.locator('#rs').click();
+    const hostileEndDialog=pp.locator('[role="dialog"]').last();
+    await hostileEndDialog.getByRole('button',{name:'Confirm'}).click();
+    await pp.locator('#sn').waitFor({state:'visible',timeout:5000});
+    assert.equal(await pp.locator('#sn').inputValue(),hostileName,'Restored hostile name stays literal in the Results dialog');
+    await pp.waitForTimeout(100);
+    assert.equal(await pp.locator('img[onerror],img[src="x"],svg[onload]').count(),0,'Hostile session name creates no injected elements');
+    assert.equal(alerts,0,'Hostile session name triggers no JavaScript dialog');
     await pp.evaluate(() => localStorage.clear());
     await pp.reload({waitUntil: 'networkidle'});
 
@@ -1252,6 +1263,27 @@ async function main() {
     assert.match(resultsDownload.suggestedFilename(),/^queuezerotwo-sat-6pm-backup-\d{4}-\d{2}-\d{2}\.json$/);
     await dp.locator('#msg').getByText('Backup exported. Live View control key excluded.').waitFor({state:'visible',timeout:5000});
     await resultsDownload.saveAs(finishedBackupPath);
+
+    // User-controlled names must never become unsafe path segments in downloaded filenames.
+    for (const [inputName,expectedPrefix] of [
+      ['a/b:c*?"<>|','queuezerotwo-abc-backup-'],
+      ['😀🔥','queuezerotwo-session-backup-'],
+      ['','queuezerotwo-session-backup-'],
+    ]) {
+      await resultsDialog.locator('#sn').fill(inputName);
+      const [caseDownload]=await Promise.all([
+        dp.waitForEvent('download'),
+        exportButton.click(),
+      ]);
+      assert.ok(caseDownload.suggestedFilename().startsWith(expectedPrefix),'Unsafe session name gets a safe filename: '+inputName);
+      assert.match(caseDownload.suggestedFilename(),/backup-\d{4}-\d{2}-\d{2}\.json$/);
+    }
+    const slugChecks=await dp.evaluate(()=>({
+      leadingDotsAndControls:backupNameSlug(String.fromCharCode(0)+'.. / '+String.fromCharCode(127)),
+      collapsedWhitespace:backupNameSlug('   Weekly   Saturday   '),
+    }));
+    assert.deepEqual(slugChecks,{leadingDotsAndControls:'session',collapsedWhitespace:'weekly-saturday'});
+    await resultsDialog.locator('#sn').fill('Sat 6pm');
     const finishedBackup=JSON.parse(fs.readFileSync(finishedBackupPath,'utf8'));
     assert.equal(finishedBackup.app, 'QueueZeroTwo');
     assert.equal(finishedBackup.version, 1);
@@ -1264,6 +1296,7 @@ async function main() {
 
     // The locked Results dialog stays usable on a narrow phone viewport.
     await dp.setViewportSize({width:320,height:640});
+    assert.equal(await resultsDialog.locator('.qrb').evaluate(el=>getComputedStyle(el).display),'none','QR is hidden at phone width');
     for (const [selector,label] of [['.sh','Share results image'],['.rb','Export backup'],['.nw','New session']]) {
       const button=resultsDialog.locator(selector);
       await button.waitFor({state:'visible',timeout:5000});
@@ -1285,7 +1318,30 @@ async function main() {
       if(await exportButton.evaluate(el=>el===document.activeElement)){exportReached=true;break}
     }
     assert.equal(exportReached,true,'Export backup is included in the modal focus trap');
+    assert.equal(exportReached,true,'Export backup is included in the modal focus trap');
+    await dp.setViewportSize({width:639,height:800});
+    assert.equal(await resultsDialog.locator('.qrb').evaluate(el=>getComputedStyle(el).display),'none','QR stays hidden below the sm breakpoint');
+    await dp.setViewportSize({width:640,height:800});
+    assert.notEqual(await resultsDialog.locator('.qrb').evaluate(el=>getComputedStyle(el).display),'none','QR appears at the sm breakpoint');
     await dp.setViewportSize({width:1280,height:800});
+    assert.notEqual(await resultsDialog.locator('.qrb').evaluate(el=>getComputedStyle(el).display),'none','Projector/desktop Results dialog keeps the QR visible');
+
+    // Share results image is drawn to canvas, not copied from the dialog DOM or QR element.
+    await dp.waitForFunction(()=>!!RF,null,{timeout:5000});
+    await dp.evaluate(()=>Object.defineProperty(navigator,'canShare',{value:()=>false,configurable:true}));
+    const [imageDownload]=await Promise.all([
+      dp.waitForEvent('download'),
+      resultsDialog.locator('.sh').click(),
+    ]);
+    assert.equal(imageDownload.suggestedFilename(),'queuezerotwo-results.png');
+    const resultsImagePath=path.join(os.tmpdir(),'queuezerotwo-results.png');
+    await imageDownload.saveAs(resultsImagePath);
+    const resultsImage=fs.readFileSync(resultsImagePath);
+    assert.equal(resultsImage.subarray(0,8).toString('hex'),'89504e470d0a1a0a','Share results produces a valid PNG');
+    assert.equal(resultsImage.readUInt32BE(16),1080,'Share image retains its expected 1080px canvas width');
+    assert.ok(resultsImage.readUInt32BE(20)>0,'Share image has a non-zero canvas height');
+    await dp.locator('#msg').getByText('Results image saved').waitFor({state:'visible',timeout:5000});
+
 
     // Context 2: clean mobile device imports the same end-of-session backup and restores the scored log.
     await ip.goto(APP, {waitUntil:'networkidle'});
@@ -1561,6 +1617,9 @@ async function main() {
       manualExportButton: true,
       resultsDialogExportButton: true,
       resultsDialogExport320pxAndFocusTrap: true,
+      resultsFilenameSanitized: true,
+      hostileImportedSessionNameSafe: true,
+      resultsQrResponsiveAndShareImage: true,
       resultsBackupRestoresNameAndMatchLog: true,
       serviceWorkerV25V26V29UpgradeToV30: true,
       deleteWorks: true,
@@ -1582,7 +1641,7 @@ async function main() {
     for (const [name,context] of [['desktop',desktop],['iphone',iphone],['pixel',pixel]]) {
       try { await context.tracing.stop({path:path.join(debugDir,name+'-trace.zip')}); } catch {}
     }
-    for (const p of [backupPath, persistencePath, endBackupPath, finishedBackupPath, hostilePath, path.join(os.tmpdir(), 'queuezerotwo-release1-mobile-auto.json'),path.join(os.tmpdir(), 'queuezerotwo-release1-mobile-manual.json')]) {
+    for (const p of [backupPath, persistencePath, endBackupPath, finishedBackupPath, hostilePath, path.join(os.tmpdir(),'queuezerotwo-results.png'), path.join(os.tmpdir(), 'queuezerotwo-release1-mobile-auto.json'),path.join(os.tmpdir(), 'queuezerotwo-release1-mobile-manual.json')]) {
       try { fs.unlinkSync(p); } catch {}
     }
     await browser.close();
