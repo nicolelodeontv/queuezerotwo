@@ -1190,7 +1190,7 @@ async function main() {
       dp.waitForEvent('download'),
       exportButton.click(),
     ]);
-    assert.match(resultsDownload.suggestedFilename(),/^queuezerotwo-backup-\\d{4}-\\d{2}-\\d{2}\\.json$/);
+    assert.match(resultsDownload.suggestedFilename(),/^queuezerotwo-backup-\d{4}-\d{2}-\d{2}\.json$/);
     await resultsDownload.saveAs(finishedBackupPath);
     const finishedBackup=JSON.parse(fs.readFileSync(finishedBackupPath,'utf8'));
     assert.equal(finishedBackup.app, 'QueueZeroTwo');
