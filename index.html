@@ -630,7 +630,7 @@ function showRes(){
   const lk=url?'<div class="qrb hidden sm:block bg-white p-3 rounded-xl mx-auto" style="width:180px;max-width:100%">'+qrSvg(url)+'</div><div class="mt-3 bg-dark-900 border border-dark-700 rounded-lg px-3 py-2 text-xs text-gray-300 break-all">'+esc(url)+'</div><button class="cp w-full mt-3 '+bS+'">Copy results link</button>':'<p class="text-sm text-gray-400">'+(S.rpf?"Results link couldn't be published. Your session is saved on this device.":S.ended?'Results link will appear when sync completes.':'Results link unavailable.')+'</p>';
   const d=RD=modal('<div class="p-5 border-b border-dark-700"><h3 class="text-2xl text-white">Session Results</h3><input id="sn" maxlength="40" value="'+esc(S.name||'')+'" placeholder="Name this session (e.g. Sat 6pm)" aria-label="Session name" class="mt-2 w-full bg-dark-900 border border-dark-700 rounded-lg px-3 py-2 text-sm text-white"><p class="text-xs text-gray-400">'+S.log.length+' games played · session ended</p></div><div class="divide-y divide-dark-700 max-h-28 overflow-y-auto sm:max-h-none sm:overflow-visible">'+rows+'</div><div class="p-5 border-t border-dark-700 text-center">'+lk+'</div><div class="p-4 border-t border-dark-700 grid grid-cols-2 gap-3"><button class="sh col-span-2 '+bP+'"><i class="fa-solid fa-image"></i> Share results image</button><button type="button" class="rb col-span-2 '+bS+'" title="Download a backup of this session"><i class="fa-solid fa-download"></i> Export backup</button><button class="nw col-span-2 '+bD+'">New session</button></div>',true);
   const cp=d.querySelector('.cp');if(cp)cp.onclick=async()=>{try{await navigator.clipboard.writeText(url);toast('Link copied','success')}catch(e){toast('Copy blocked by browser.','error')}};
-  const rb=d.querySelector('.rb');if(rb)rb.onclick=()=>{const label=String(S.name||'session').trim().toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'').slice(0,32)||'session';const date=new Date().toISOString().slice(0,10);downloadBackup('Backup exported. Live View control key excluded.','queuezerotwo-'+label+'-backup-'+date+'.json')};
+  const rb=d.querySelector('.rb');if(rb)rb.onclick=()=>{const label=backupNameSlug(S.name);const date=new Date().toISOString().slice(0,10);downloadBackup('Backup exported. Live View control key excluded.','queuezerotwo-'+label+'-backup-'+date+'.json')};
   d.querySelector('.sh').onclick=shareImg;d.querySelector('#sn').oninput=e=>{S.name=e.target.value.trim().slice(0,40);save();RF=null;prepImg()};
   d.querySelector('.nw').onclick=()=>ask('Start new session?','This clears the stack, courts, leaderboard and log. Make sure you have shared the results.',()=>{d.__close();const nc=S.courts.length,k={snd:S.snd,hap:S.hap,md:S.md,ws:S.ws,wl:S.wl,eq:S.eq,tts:S.tts,target:S.target,wb:S.wb,hist:archive()};S=Object.assign(mk(),k);PublishRejected='';PublishRejectedNotified.clear();S.ho=false;S.hoff=0;S.sid='';S.sh='';clearPublishQueue();setCourts(nc);save();render();toast('New session started','success')})
 }
@@ -685,6 +685,11 @@ function expData(){
   const o=JSON.parse(JSON.stringify(S));
   delete o.sid;delete o.sh;delete o.rid;
   return JSON.stringify({app:'QueueZeroTwo',version:BACKUP_VERSION,exportedAt:new Date().toISOString(),state:o},null,2)
+}
+function backupNameSlug(value){
+  const cleaned=String(value??'').normalize('NFKC').replace(/[\u0000-\u001f\u007f-\u009f]/g,'').replace(/[\\/:*?"<>|]/g,'').replace(/\s+/g,' ').trim().replace(/^\.+/,'').trim();
+  const slug=cleaned.toLowerCase().replace(/[^\p{L}\p{N}]+/gu,'-').replace(/^-+|-+$/g,'').slice(0,32).replace(/-+$/g,'');
+  return slug||'session'
 }
 function downloadBackup(note,filename){
   const blob=new Blob([expData()],{type:'application/json'}),a=document.createElement('a');
