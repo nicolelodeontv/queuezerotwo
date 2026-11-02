@@ -59,10 +59,16 @@ async function syncContext(browser, device, publishes, resultPublishes) {
 }
 
 async function setupFour(page) {
-  await page.goto(APP, {waitUntil: 'networkidle'});
+  await page.goto(APP.split('#')[0], {waitUntil: 'networkidle'});
+  await page.evaluate(() => {
+    localStorage.removeItem('pickleStackState');
+    localStorage.removeItem('queuezerotwo-publish-queue-v1');
+  });
+  await page.reload({waitUntil: 'networkidle'});
   await page.evaluate(() => {
     if (innerWidth < 1024) document.getElementById('nvs')?.click();
   });
+  await page.locator('#pn').waitFor({state:'visible',timeout:5000});
   await page.locator('#pn').fill('Alpha,Beta,Gamma,Delta');
   await page.locator('#f button').click();
   await page.waitForFunction(() => document.getElementById('wc')?.textContent === '4', null, {timeout: 5000});
@@ -72,12 +78,12 @@ async function setupFour(page) {
   assert.equal(await page.locator('#qc').innerText(), '4');
 }
 
-async function simulateV25ToV27(browser) {
+async function simulateV25ToV29(browser) {
   const context = await browser.newContext({...devices['Desktop Chrome'],serviceWorkers:'allow',locale:'en-US'});
   const page = await context.newPage();
   let swFetch = 0;
   const currentSw = fs.readFileSync(path.resolve('sw.js'), 'utf8');
-  assert.match(currentSw,/queuezerotwo-v27/);
+  assert.match(currentSw,/queuezerotwo-v29/);
   const oldV25 = `const V='queuezerotwo-v25';self.addEventListener('install',e=>e.waitUntil(caches.open(V).then(c=>c.put('/__queuezerotwo_v25_sentinel__',new Response('v25'))).then(()=>self.skipWaiting())));self.addEventListener('activate',e=>e.waitUntil(self.clients.claim()));`;
   await context.route('**/sw.js', async route => {
     swFetch++;
@@ -92,7 +98,7 @@ async function simulateV25ToV27(browser) {
   await page.evaluate(async()=>{const r=await navigator.serviceWorker.getRegistration();await r.update()});
   await page.waitForFunction(async()=>{
     const r=await navigator.serviceWorker.getRegistration();
-    return !!r?.waiting || await caches.has('queuezerotwo-v27');
+    return !!r?.waiting || await caches.has('queuezerotwo-v29');
   },null,{timeout:10000});
   await page.evaluate(async()=>{
     const r=await navigator.serviceWorker.getRegistration();
@@ -100,11 +106,11 @@ async function simulateV25ToV27(browser) {
   });
   await page.waitForFunction(async()=>{
     const r=await navigator.serviceWorker.getRegistration();
-    return !!r && !r.waiting && r.active?.state==='activated' && await caches.has('queuezerotwo-v27');
+    return !!r && !r.waiting && r.active?.state==='activated' && await caches.has('queuezerotwo-v29');
   },null,{timeout:10000});
   await page.reload({waitUntil:'networkidle'});
   const out=await page.evaluate(async()=>{
-    const cache=await caches.open('queuezerotwo-v27');
+    const cache=await caches.open('queuezerotwo-v29');
     return {
       queue:JSON.parse(localStorage.getItem('queuezerotwo-publish-queue-v1')||'{"items":[]}').items,
       state:JSON.parse(localStorage.getItem('pickleStackState')||'{}'),
@@ -122,12 +128,12 @@ async function simulateV25ToV27(browser) {
   await context.close();
 }
 
-async function simulateV26ToV27(browser) {
+async function simulateV26ToV29(browser) {
   const context = await browser.newContext({...devices['Desktop Chrome'],serviceWorkers:'allow',locale:'en-US'});
   const page = await context.newPage();
   let swFetch = 0;
   const currentSw = fs.readFileSync(path.resolve('sw.js'), 'utf8');
-  assert.match(currentSw,/queuezerotwo-v27/);
+  assert.match(currentSw,/queuezerotwo-v29/);
   const oldV26 = `const V='queuezerotwo-v26';self.addEventListener('install',e=>e.waitUntil(caches.open(V).then(c=>c.put('/__queuezerotwo_v26_sentinel__',new Response('v26'))).then(()=>self.skipWaiting())));self.addEventListener('activate',e=>e.waitUntil(self.clients.claim()));`;
   await context.route('**/sw.js', async route => {
     swFetch++;
@@ -142,7 +148,7 @@ async function simulateV26ToV27(browser) {
   await page.evaluate(async()=>{const r=await navigator.serviceWorker.getRegistration();await r.update()});
   await page.waitForFunction(async()=>{
     const r=await navigator.serviceWorker.getRegistration();
-    return !!r?.waiting || await caches.has('queuezerotwo-v27');
+    return !!r?.waiting || await caches.has('queuezerotwo-v29');
   },null,{timeout:10000});
   await page.evaluate(async()=>{
     const r=await navigator.serviceWorker.getRegistration();
@@ -150,11 +156,11 @@ async function simulateV26ToV27(browser) {
   });
   await page.waitForFunction(async()=>{
     const r=await navigator.serviceWorker.getRegistration();
-    return !!r && !r.waiting && r.active?.state==='activated' && await caches.has('queuezerotwo-v27');
+    return !!r && !r.waiting && r.active?.state==='activated' && await caches.has('queuezerotwo-v29');
   },null,{timeout:10000});
   await page.reload({waitUntil:'networkidle'});
   const out=await page.evaluate(async()=>{
-    const cache=await caches.open('queuezerotwo-v27');
+    const cache=await caches.open('queuezerotwo-v29');
     return {
       queue:JSON.parse(localStorage.getItem('queuezerotwo-publish-queue-v1')||'{"items":[]}').items,
       state:JSON.parse(localStorage.getItem('pickleStackState')||'{}'),
@@ -407,10 +413,17 @@ async function main() {
   const dp = await desktop.newPage();
   const ip = await iphone.newPage();
   const pp = await pixel.newPage();
+  const debugDir=path.resolve('artifacts/playwright-debug');
+  fs.mkdirSync(debugDir,{recursive:true});
+  for (const [name,page] of [['desktop',dp],['iphone',ip],['pixel',pp]]) {
+    page.on('pageerror',error=>console.error('[Playwright pageerror '+name+']',error.stack||error));
+    page.on('console',message=>{if(message.type()==='error')console.error('[Playwright console '+name+']',message.text())});
+  }
+  await Promise.all([desktop,iphone,pixel].map(context=>context.tracing.start({screenshots:true,snapshots:true,sources:true})));
   const syncPublishes = [];
   const resultPublishes = [];
-  await simulateV25ToV27(browser);
-  await simulateV26ToV27(browser);
+  await simulateV25ToV29(browser);
+  await simulateV26ToV29(browser);
   await avatarProfileRegression(browser);
   await leaderboardPodiumRegression(browser);
   await durableQueueCompactionRegression(browser);
@@ -467,6 +480,45 @@ async function main() {
     assert.match(liveViewerText,/about 4 min/);
     assert.match(liveViewerText,/Mike R\./);
     assert.doesNotMatch(liveViewerText,/Reyes|Rivera|Lopez|Chen|Diaz/);
+
+    // The publish contract is exercised against payloads built by the real client helpers.
+    const clientPayloadContract=await sp.evaluate(()=>{
+      const oldS=S,oldSV=SV,oldV=V,oldRA=RA;
+      S=mk();
+      const names=['Ari | 東京 🌱','Mika Café|星','Noah | 🥒','Zoë 北'];
+      S.queue=names.slice(0,1);
+      S.lv={'ari | 東京 🌱':4,'mika café|星':3,'noah | 🥒':2,'zoë 北':5};
+      const empty=sdata();
+      S.queue=names.slice();
+      const populated=sdata();
+      const allNames=Array.from({length:200},(_,i)=>String(i+1).padStart(3,'0')+'|東京🌱');
+      S.log=Array.from({length:500},(_,i)=>({
+        p:[allNames[(i*4)%200],allNames[(i*4+1)%200],allNames[(i*4+2)%200],allNames[(i*4+3)%200]],
+        s:[11,9],w:0,c:'Court '+(i%8+1),tg:11,t:1760000000000+i,d:600000
+      }));
+      const results=resultsSnapshot(),bytes=new Blob([JSON.stringify(results)]).size;
+      S=oldS;SV=oldSV;V=oldV;RA=oldRA;render();
+      return {
+        empty,
+        populated,
+        results:{players:results.leaderboard.length,games:results.matches.length,bytes,hasPipe:results.matches.some(m=>m.p.some(n=>n.includes('|'))),hasUnicode:results.matches.some(m=>m.p.some(n=>n.includes('東京')))},
+        levelDataPublished:Object.hasOwn(populated,'lv')
+      };
+    });
+    assert.equal(clientPayloadContract.empty.tm,null);
+    assert.deepEqual(clientPayloadContract.empty.nx,[]);
+    assert.deepEqual(clientPayloadContract.empty.up,[]);
+    assert.ok(clientPayloadContract.empty.courts.every(c=>Array.isArray(c.p)&&c.p.length===0));
+    assert.equal(clientPayloadContract.populated.tm,null);
+    assert.equal(clientPayloadContract.populated.nx.length,4);
+    assert.equal(clientPayloadContract.populated.up.length,4);
+    assert.equal(clientPayloadContract.populated.q[0],'Ari | 東京 🌱');
+    assert.equal(clientPayloadContract.levelDataPublished,false,'skill ratings stay local and do not change the publish payload contract');
+    assert.equal(clientPayloadContract.results.players,200);
+    assert.equal(clientPayloadContract.results.games,500);
+    assert.ok(clientPayloadContract.results.bytes<200000);
+    assert.equal(clientPayloadContract.results.hasPipe,true);
+    assert.equal(clientPayloadContract.results.hasUnicode,true);
 
     // The database broadcasts data:null when an expired live session is deleted.
     // Exercise the exact callback registered on session_update and keep the last view intact.
@@ -528,19 +580,74 @@ async function main() {
     assert.equal(snapSize.hasMike,true);
 
     // Cold-cache archived results page loads through the read-only results endpoint.
+    // Exercise the client renderer with hostile text in both name and numeric fields.
+    // The numeric strings must normalize to zero, never become HTML, even when the
+    // server-side RPC guard is bypassed by this mocked GET response.
+    const hostileName='<img/src=x/onerror=alert(1)>',hostileNumeric='<svg/onload=alert(1)>';
+    const xssFailures=[];
+    const xssCheck=(pass,message)=>{if(!pass)xssFailures.push(message)};
+
+    // #r=: archived-results client rendering, with the database publish guard bypassed.
     const coldContext=await browser.newContext({...devices['Desktop Chrome'],serviceWorkers:'allow',locale:'en-US'});
     await coldContext.route(SUPABASE+'/**',route=>{
       const u=new URL(route.request().url());
       if(u.pathname.endsWith('/rest/v1/pickle_results')&&route.request().method()==='GET'){
-        return route.fulfill({status:200,contentType:'application/json',body:JSON.stringify([{data:{v:1,name:'Cold cache results',totals:{players:1,games:1,courts:1},leaderboard:[{n:'Ana',w:1,l:0,d:2}],matches:[]},created_at:new Date().toISOString(),expires_at:new Date(Date.now()+30*86400000).toISOString()}])});
+        return route.fulfill({status:200,contentType:'application/json',body:JSON.stringify([{data:{v:1,name:'Cold cache results',totals:{players:hostileNumeric,games:hostileNumeric,courts:hostileNumeric},leaderboard:[{n:hostileName,w:hostileNumeric,l:hostileNumeric,d:hostileNumeric}],matches:[{c:'Court 1',p:[hostileName,'Bob','Cara','Dan'],s:[hostileNumeric,hostileNumeric],w:0}]},created_at:new Date().toISOString(),expires_at:new Date(Date.now()+30*86400000).toISOString()}])});
       }
       return route.abort();
     });
     const coldPage=await coldContext.newPage();
+    let coldAlerts=0;
+    coldPage.on('dialog',async dialog=>{coldAlerts++;await dialog.dismiss()});
     await coldPage.goto(APP+'#r=COLDRESULT1',{waitUntil:'networkidle'});
     await coldPage.getByText('Cold cache results',{exact:true}).waitFor({state:'visible',timeout:5000});
     await coldPage.getByText('READ-ONLY',{exact:true}).waitFor({state:'visible',timeout:5000});
+    const coldText=await coldPage.locator('#viewer').innerText();
+    const coldNodes=await coldPage.locator('#viewer').evaluate(el=>({
+      img:el.querySelectorAll('img').length,
+      svg:el.querySelectorAll('svg').length,
+      script:el.querySelectorAll('script').length
+    }));
+    xssCheck(coldAlerts===0,'#r= fired a JavaScript dialog');
+    xssCheck(coldNodes.img===0&&coldNodes.svg===0&&coldNodes.script===0,'#r= viewer contains an injected img, svg, or script element: '+JSON.stringify(coldNodes));
+    xssCheck(coldText.includes(hostileName),'#r= hostile player name was not displayed as literal text');
+    xssCheck(!coldText.includes(hostileNumeric),'#r= hostile numeric strings were not normalized to zero');
+    xssCheck(/0 players · 0 games · 0 courts/.test(coldText),'#r= totals.players/games did not normalize to zero');
+    xssCheck(/0% win rate · 0 games · 0/.test(coldText),'#r= leaderboard w/l/d did not normalize to zero');
+    xssCheck(/0-0/.test(coldText),'#r= archived match score did not normalize to zero');
     await coldContext.close();
+
+    // #s=: Live View client rendering, independent of the database publish guard.
+    const liveContext=await browser.newContext({...devices['Desktop Chrome'],serviceWorkers:'block',locale:'en-US'});
+    const hostileLiveScore='<img src=x onerror=alert(1)>';
+    const livePayload={q:[],t:11,lb:[],nx:[],tm:null,up:[],wb:2,courts:[{a:true,n:'Court 1',p:['Alice','Bob','Cara','Dan'],s:[hostileLiveScore,9]}]};
+    await liveContext.route(SUPABASE+'/**',route=>{
+      const u=new URL(route.request().url());
+      if(u.pathname.endsWith('/rest/v1/live_sessions')&&route.request().method()==='GET'){
+        return route.fulfill({status:200,contentType:'application/json',body:JSON.stringify([{code:'SAFELIVE01',data:livePayload,updated_at:new Date().toISOString(),expires_at:new Date(Date.now()+86400000).toISOString()}])});
+      }
+      return route.abort();
+    });
+    const livePage=await liveContext.newPage();
+    let liveAlerts=0;
+    livePage.on('dialog',async dialog=>{liveAlerts++;await dialog.dismiss()});
+    await livePage.goto(APP+'#s=NYXSSBASE2',{waitUntil:'domcontentloaded'});
+    await livePage.getByRole('heading',{name:'Live Session'}).waitFor({state:'visible',timeout:10000});
+    await livePage.waitForFunction(()=>document.querySelector('#viewer')?.innerText.includes('Cara & Dan')&&document.querySelector('#viewer')?.innerText.includes('9'),null,{timeout:10000});
+    const nyxssViewer=await livePage.locator('#viewer').evaluate(el=>({
+      text:el.innerText,
+      images:el.querySelectorAll('img').length,
+      svgs:el.querySelectorAll('svg').length,
+      scripts:el.querySelectorAll('script').length
+    }));
+    console.log('[NYXSSBASE2 viewer DOM check] '+JSON.stringify({...nyxssViewer,alertFired:liveAlerts>0}));
+    xssCheck(liveAlerts===0,'#s= NYXSSBASE2 fired a JavaScript dialog');
+    xssCheck(nyxssViewer.images===0&&nyxssViewer.svgs===0&&nyxssViewer.scripts===0,'#s= NYXSSBASE2 viewer contains an injected img, svg, or script element: '+JSON.stringify(nyxssViewer));
+    xssCheck(!nyxssViewer.text.includes(hostileLiveScore),'#s= hostile score was not normalized to zero');
+    xssCheck(/Alice & Bob\n0\nCara & Dan\n9/.test(nyxssViewer.text),'#s= exact hostile-row scores did not render as 0 and 9');
+    await liveContext.close();
+
+    assert.deepEqual(xssFailures,[],'Client-side viewer XSS checks failed:\n'+xssFailures.join('\n'));
 
     // Results codes are crypto-random 10-character strings from the full 32-character alphabet.
     const codeCheck=await sp.evaluate(() => ({
@@ -739,6 +846,120 @@ async function main() {
     assert.match(await sp.locator('#ct').innerText(), /Sync stuck/);
     await sp.evaluate(() => {clearTimeout(PQRetry);PQRetry=null});
 
+    // Deterministic rejection-state regression tests run in a dedicated 1280px desktop profile.
+    const queueContext=await freshContext(browser,devices['Desktop Chrome']);
+    const queuePage=await queueContext.newPage();
+    await setupFour(queuePage);
+    assert.equal(await queuePage.evaluate(()=>innerWidth),1280,'queue failure regression runs at desktop width');
+
+    await queuePage.evaluate(() => {
+      const sid='VALIDATIONQ1',sh='d'.repeat(64);
+      S.ho=false;S.sid=sid;S.sh=sh;S.hoff=0;S.ended=false;S.lpf=false;S.rpf=false;
+      PublishRejected='';PublishRejectedNotified.clear();
+      PQ=[
+        {id:'invalid-live-101',seq:101,sid,sh,kind:'state',attempts:0,lastError:'',payload:{testTag:'bad-live-a'}},
+        {id:'invalid-live-102',seq:102,sid,sh,kind:'state',attempts:0,lastError:'',payload:{testTag:'bad-live-b'}}
+      ];
+      PQS=102;savePublishQueue();clearTimeout(PQRetry);PQRetry=null;
+      window.__validationQueueCalls=[];
+      sb.rpc=async(name,args)=>{
+        const tag=args.p_payload?.testTag;
+        window.__validationQueueCalls.push({name,tag});
+        if(tag==='bad-live-a'||tag==='bad-live-b')return {error:new Error('Invalid Live View payload values.')};
+        return {data:true,error:null};
+      };
+      syncMarker();
+    });
+    await queuePage.evaluate(() => flushPublishQueue());
+    const liveRejected=await queuePage.evaluate(()=>({
+      queue:JSON.parse(localStorage.getItem('queuezerotwo-publish-queue-v1')||'{"items":[]}').items,
+      calls:window.__validationQueueCalls.slice(),
+      notices:[...document.querySelectorAll('#msg .mb')].map(x=>x.textContent).filter(x=>/Live View update was rejected/i.test(x)),
+      status:document.getElementById('ct').textContent,
+      icon:document.getElementById('ci').className,
+      rejected:PublishRejected,lpf:S.lpf
+    }));
+    assert.equal(liveRejected.queue.length,0,'both deterministic Live View failures are dropped');
+    assert.deepEqual(liveRejected.calls,[
+      {name:'publish_pickle_session',tag:'bad-live-a'},
+      {name:'publish_pickle_session',tag:'bad-live-b'}
+    ]);
+    assert.equal(liveRejected.notices.length,1,'repeated state rejections produce only one toast per failure type');
+    assert.match(liveRejected.status,/Live View rejected · saved here/);
+    assert.match(liveRejected.icon,/text-red-500/);
+    assert.equal(liveRejected.rejected,'live');
+    assert.equal(liveRejected.lpf,true);
+
+    // A successful publish clears the Live View error marker and re-arms one notice for the next failure.
+    await queuePage.evaluate(() => {
+      PQ=[{id:'valid-live-103',seq:103,sid:S.sid,sh:S.sh,kind:'state',attempts:0,lastError:'',payload:{testTag:'valid-live'}}];
+      PQS=103;savePublishQueue();
+      sb.rpc=async()=>({data:true,error:null});
+    });
+    await queuePage.evaluate(() => flushPublishQueue());
+    const liveRecovered=await queuePage.evaluate(()=>({
+      status:document.getElementById('ct').textContent,
+      rejected:PublishRejected,lpf:S.lpf,queue:PQ.length
+    }));
+    assert.equal(liveRecovered.queue,0);
+    assert.equal(liveRecovered.lpf,false);
+    assert.equal(liveRecovered.rejected,'');
+    assert.match(liveRecovered.status,/Saved on this device/);
+
+    // Results rejection is distinct: keep the local session and replace the impossible
+    // "will appear when sync completes" copy with a truthful failure message.
+    await queuePage.evaluate(() => {
+      S.ended=true;S.rr=false;S.lr=false;S.rpf=false;S.rid='RESULTQ102';
+      PQ=[
+        {id:'invalid-results-102',seq:104,sid:S.sid,sh:S.sh,kind:'results',rid:'RESULTQ102',attempts:0,lastError:'',payload:{testTag:'bad-results-a'}},
+        {id:'invalid-results-103',seq:105,sid:S.sid,sh:S.sh,kind:'results',rid:'RESULTQ103',attempts:0,lastError:'',payload:{testTag:'bad-results-b'}}
+      ];
+      PQS=105;savePublishQueue();
+      sb.rpc=async(name,args)=>{
+        const tag=args.p_payload?.testTag;
+        window.__validationQueueCalls.push({name,tag});
+        if(tag==='bad-results-a'||tag==='bad-results-b')return {error:new Error('Invalid results match values.')};
+        return {data:'GOODRES123',error:null};
+      };
+    });
+    await queuePage.evaluate(() => flushPublishQueue());
+    const resultsRejected=await queuePage.evaluate(()=>({
+      queue:PQ.length,
+      notices:[...document.querySelectorAll('#msg .mb')].map(x=>x.textContent).filter(x=>/Results couldn't be published/i.test(x)),
+      status:document.getElementById('ct').textContent,
+      rejected:PublishRejected,rpf:S.rpf,rr:S.rr,
+      dialog:document.querySelector('[role="dialog"]')?.innerText||''
+    }));
+    assert.equal(resultsRejected.queue,0,'both invalid results items are dropped');
+    assert.equal(resultsRejected.notices.length,1,'repeated results rejections produce one toast per failure type');
+    assert.match(resultsRejected.notices[0],/Results couldn't be published\. Your session is saved on this device\./);
+    assert.match(resultsRejected.status,/Results not published · saved here/);
+    assert.equal(resultsRejected.rejected,'results');
+    assert.equal(resultsRejected.rpf,true);
+    assert.equal(resultsRejected.rr,false);
+    assert.match(resultsRejected.dialog,/Results link couldn't be published\. Your session is saved on this device\./);
+    assert.doesNotMatch(resultsRejected.dialog,/Results link will appear when sync completes/);
+
+    // A successful results publish restores the link and clears the durable results-failure state.
+    await queuePage.evaluate(() => {
+      PQ=[{id:'valid-results-104',seq:106,sid:S.sid,sh:S.sh,kind:'results',rid:'RESULTQ102',attempts:0,lastError:'',payload:{testTag:'valid-results'}}];
+      PQS=106;savePublishQueue();
+    });
+    await queuePage.evaluate(() => flushPublishQueue());
+    const resultsRecovered=await queuePage.evaluate(()=>({
+      status:document.getElementById('ct').textContent,
+      rejected:PublishRejected,rpf:S.rpf,rr:S.rr,rid:S.rid,queue:PQ.length,
+      dialog:document.querySelector('[role="dialog"]')?.innerText||''
+    }));
+    assert.equal(resultsRecovered.queue,0);
+    assert.equal(resultsRecovered.rpf,false);
+    assert.equal(resultsRecovered.rr,true);
+    assert.equal(resultsRecovered.rid,'GOODRES123');
+    assert.equal(resultsRecovered.rejected,'');
+    assert.match(resultsRecovered.status,/Saved on this device/);
+    assert.match(resultsRecovered.dialog,/#r=GOODRES123/);
+    await queueContext.close();
+
     // Release 2: offline End session queues one results snapshot and only exposes its link after publish succeeds.
     await setupFour(sp);
     await sp.evaluate(() => {
@@ -750,8 +971,7 @@ async function main() {
     await sync.setOffline(true);
     await sp.locator('#rs').click();
     const endOfflineDialog=sp.locator('[role="dialog"]');
-    const [offlineResultBackup]=await Promise.all([sp.waitForEvent('download'),endOfflineDialog.getByRole('button',{name:'Confirm'}).click()]);
-    await offlineResultBackup.delete();
+    await endOfflineDialog.getByRole('button',{name:'Confirm'}).click();
     await sp.waitForFunction(() => {
       const q=JSON.parse(localStorage.getItem('queuezerotwo-publish-queue-v1')||'{"items":[]}').items;
       return !!q.find(x=>x.kind==='results'&&x.rid&&x.rid.length===10) && S.rr===false;
@@ -767,7 +987,7 @@ async function main() {
     assert.match(readyUrlText,/#r=/);
     assert.doesNotMatch(readyUrlText,/PERSISTEDSID/);
 
-    // Release 1 regression: End session immediately downloads an import-compatible JSON backup.
+    // Release 1 regression: End Session preserves an import-compatible JSON backup payload.
     await dp.goto(APP, {waitUntil: 'networkidle'});
     await dp.locator('#tg').selectOption('15');
     await dp.locator('#wbs').selectOption('1');
@@ -785,21 +1005,26 @@ async function main() {
 
     const endDialog = dp.locator('[role="dialog"]');
     await dp.locator('#rs').click();
-    const [endBackupDownload] = await Promise.all([
-      dp.waitForEvent('download'),
-      endDialog.getByRole('button', {name: 'Confirm'}).click(),
-    ]);
-    await endBackupDownload.saveAs(endBackupPath);
-    const endBackup = JSON.parse(fs.readFileSync(endBackupPath, 'utf8'));
+    await endDialog.getByRole('button', {name: 'Confirm'}).click();
+    await dp.waitForFunction(() => S.ended === true, null, {timeout: 5000});
+
+    // End Session no longer auto-downloads. Exercise the serializer directly here;
+    // the desktop Export button is covered separately by the real-click test above.
+    await dp.locator('#sn').waitFor({state:'visible',timeout:10000});
+    const endBackupJson = await dp.evaluate(() => expData());
+    fs.writeFileSync(endBackupPath,endBackupJson,'utf8');
+    const endBackup = JSON.parse(endBackupJson);
     assert.equal(endBackup.app, 'QueueZeroTwo');
     assert.equal(endBackup.version, 1);
     assert.equal(endBackup.state.ended, true);
 
-    // Close the results modal so subsequent fixture resets are not covered by it.
-    await dp.locator('.nw').click();
-    await dp.getByRole('button', {name: 'Confirm'}).click();
+    // Exercise the intended New session flow to dismiss the locked Results dialog
+    // before reusing this desktop page for unrelated queue and scoring fixtures.
+    await dp.locator('[role="dialog"]').last().getByRole('button', {name: 'New session'}).click();
+    await dp.locator('[role="dialog"]').last().getByRole('button', {name: 'Confirm'}).click();
+    await dp.locator('[role="dialog"]').waitFor({state: 'detached'});
 
-    // Restore the end-session backup to prove it remains compatible with Import.
+    // Restore the manually exported end-session backup to prove it remains compatible with Import.
     await ip.goto(APP, {waitUntil: 'networkidle'});
     await ip.evaluate(() => localStorage.clear());
     await ip.reload({waitUntil: 'networkidle'});
@@ -813,17 +1038,18 @@ async function main() {
     assert.equal(await ip.locator('#wbs').inputValue(), '1');
     assert.equal(await ip.locator('#ncs').inputValue(), '6');
 
-    // Mobile-sized fallback: ending a session downloads automatically and leaves a visible Save backup action.
+    // Mobile: End Session creates the same import-compatible ended-state payload.
     await ip.evaluate(() => { localStorage.clear(); S=mk(); S.ended=false; sb.rpc=async()=>({data:true,error:null}); render(); });
     const mobileEndDialog=ip.locator('[role="dialog"]');
     await ip.locator('#rs').click();
-    const [mobileAutoBackup] = await Promise.all([
-      ip.waitForEvent('download'),
-      mobileEndDialog.getByRole('button', {name: 'Confirm'}).click(),
-    ]);
-    await mobileAutoBackup.saveAs(path.join(os.tmpdir(), 'queuezerotwo-release1-mobile-auto.json'));
-    await ip.locator('[role="dialog"] .bk').waitFor({state:'visible', timeout:5000});
-    assert.equal(await ip.locator('[role="dialog"] .bk').isVisible(), true);
+    await mobileEndDialog.getByRole('button', {name: 'Confirm'}).click();
+    await ip.locator('#sn').waitFor({state:'visible',timeout:10000});
+    const mobileBackupJsonText=await ip.evaluate(() => expData());
+    const mobileManualBackupPath=path.join(os.tmpdir(), 'queuezerotwo-release1-mobile-manual.json');
+    fs.writeFileSync(mobileManualBackupPath,mobileBackupJsonText,'utf8');
+    const mobileBackupJson=JSON.parse(mobileBackupJsonText);
+    assert.equal(mobileBackupJson.app, 'QueueZeroTwo');
+    assert.equal(mobileBackupJson.state.ended, true);
     await ip.evaluate(() => localStorage.clear());
     await ip.reload({waitUntil: 'networkidle'});
 
@@ -849,11 +1075,9 @@ async function main() {
       state:{
         courts:[
           {id:1,name:hostile,isActive:false,players:[],score:[0,0],mid:'',t:0},
-          {id:2,name:'Court 2',isActive:false,players:[],score:[0,0],mid:'',t:0},
-          {id:3,name:'Court 3',isActive:false,players:[],score:[0,0],mid:'',t:0},
-          {id:4,name:'Court 4',isActive:false,players:[],score:[0,0],mid:'',t:0}
+          ...Array.from({length:11},(_,i)=>({id:i+2,name:'Court '+(i+2),isActive:false,players:[],score:[0,0],mid:'',t:0}))
         ],
-        log:[{mid:'hostile1',c:hostile,p:['Alice','Bob','Carol','Dave'],s:[11,9],w:0,t:Date.now(),d:600000,tg:11}]
+        log:[{mid:'hostile1',c:hostile,p:['Alice','Bob','Carol','Dave'],s:[11,9],t:Date.now(),d:600000,tg:11}]
       }
     }), 'utf8');
     let alerts=0;
@@ -863,7 +1087,9 @@ async function main() {
     await pp.reload({waitUntil: 'networkidle'});
     await pp.locator('#imp').setInputFiles(hostilePath);
     await pp.getByRole('button', {name: 'Confirm'}).click();
-    await pp.waitForFunction(() => S.log.length === 1 && S.courts[0].name.includes('<img'), null, {timeout: 5000});
+    await pp.waitForFunction(() => S.log.length === 1 && S.courts.length === 8 && S.log[0].w === -1 && S.courts[0].name.includes('<img'), null, {timeout: 5000});
+    assert.equal(await pp.locator('#ncs').inputValue(), '8');
+    assert.deepEqual(await pp.evaluate(() => stats()), []);
     assert.equal(alerts, 0);
     assert.equal(await pp.locator('#log img').count(), 0);
     assert.equal(await pp.locator('#courts img').count(), 0);
@@ -945,15 +1171,14 @@ async function main() {
     await dp.getByRole('button', {name: 'FINISH & LOG'}).click();
     await dp.locator('#msg').getByText('Match logged.').waitFor({state:'visible', timeout:5000});
 
-    // Release 1 regression: named finished sessions auto-download a backup containing the scored log.
+    // A finished session can be serialized into a full backup for restore.
     await dp.locator('#rs').click();
     const finishDialog = dp.locator('[role="dialog"]');
-    const [finishedDownload] = await Promise.all([
-      dp.waitForEvent('download'),
-      finishDialog.getByRole('button', {name: 'Confirm'}).click(),
-    ]);
-    await finishedDownload.saveAs(finishedBackupPath);
-    const finishedBackup = JSON.parse(fs.readFileSync(finishedBackupPath, 'utf8'));
+    await finishDialog.getByRole('button', {name: 'Confirm'}).click();
+    await dp.locator('#sn').waitFor({state:'visible',timeout:10000});
+    const finishedBackupJson=await dp.evaluate(() => expData());
+    fs.writeFileSync(finishedBackupPath,finishedBackupJson,'utf8');
+    const finishedBackup=JSON.parse(finishedBackupJson);
     assert.equal(finishedBackup.app, 'QueueZeroTwo');
     assert.equal(finishedBackup.state.log.length, 1);
     assert.equal(finishedBackup.state.log[0].p.length, 4);
@@ -983,13 +1208,11 @@ async function main() {
     assert.match(await history.innerText(), /Alpha|Beta|Gamma|Delta/);
     await history.getByRole('button', {name: 'Close'}).click();
 
-    // Export must contain the archived history.
-    const [download] = await Promise.all([
-      dp.waitForEvent('download'),
-      (await openMenu(dp), dp.locator('#qmenu #exp').click()),
-    ]);
-    await download.saveAs(backupPath);
-    const backup = JSON.parse(fs.readFileSync(backupPath, 'utf8'));
+    // The backup serializer must include archived history. The actual app Export
+    // button/download interaction is covered once above to avoid duplicate download timing.
+    const backupJson=await dp.evaluate(() => expData());
+    fs.writeFileSync(backupPath,backupJson,'utf8');
+    const backup=JSON.parse(backupJson);
     assert.equal(backup.app, 'QueueZeroTwo');
     assert.equal(backup.state.hist[0].name, 'Sat 6pm');
     assert.equal(backup.state.hist[0].g, 1);
@@ -1228,6 +1451,7 @@ async function main() {
       archivedHistory: true,
       topThreeStored: true,
       exportContainsHistory: true,
+      manualExportButton: true,
       deleteWorks: true,
       importRestoresHistory: true,
       mobileScoring: true,
@@ -1239,7 +1463,15 @@ async function main() {
       realisticQueueQuotaWarning: true,
     }, null, 2));
   } finally {
-    for (const p of [backupPath, persistencePath, endBackupPath, finishedBackupPath, hostilePath, path.join(os.tmpdir(), 'queuezerotwo-release1-mobile-auto.json')]) {
+    // Preserve trace snapshots and final screenshots so a failed CI run can be debugged
+    // without needing access to the live Actions log.
+    for (const [name,page] of [['desktop',dp],['iphone',ip],['pixel',pp]]) {
+      try { await page.screenshot({path:path.join(debugDir,name+'-final.png'),fullPage:true}); } catch {}
+    }
+    for (const [name,context] of [['desktop',desktop],['iphone',iphone],['pixel',pixel]]) {
+      try { await context.tracing.stop({path:path.join(debugDir,name+'-trace.zip')}); } catch {}
+    }
+    for (const p of [backupPath, persistencePath, endBackupPath, finishedBackupPath, hostilePath, path.join(os.tmpdir(), 'queuezerotwo-release1-mobile-auto.json'),path.join(os.tmpdir(), 'queuezerotwo-release1-mobile-manual.json')]) {
       try { fs.unlinkSync(p); } catch {}
     }
     await browser.close();

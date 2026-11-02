@@ -86,7 +86,51 @@ jobs:
         env:
           APP_URL: http://127.0.0.1:4173/
         run: node tests/release2b-sessions.mjs
+      - name: Check Nyork two-browser integration test syntax
+        run: node --check tests/nyork-two-browser-live.mjs
+      - name: Run Nyork real-backend two-browser host/viewer test
+        env:
+          APP_URL: http://127.0.0.1:4173/
+          NYORK_SUPABASE_URL: https://yeytqiyhosoyuassjcef.supabase.co
+          NYORK_SUPABASE_PUBLISHABLE_KEY: sb_publishable_k41MPtlaBwnddBd6QIutTQ_kMWbeN7T
+        run: node tests/nyork-two-browser-live.mjs
+      - name: Upload Playwright failure diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: release2b-playwright-debug
+          path: artifacts/playwright-debug/
+          if-no-files-found: warn
+          retention-days: 7
       - name: Sweep mobile, tablet, and desktop viewport widths
         env:
           APP_URL: http://127.0.0.1:4173/
         run: node tests/responsive-viewport-sweep.mjs
+      - name: Check 320px light/dark visual test syntax
+        run: node --check tests/responsive-320-themes.mjs
+      - name: Run 320px light/dark menu and layout checks
+        env:
+          APP_URL: http://127.0.0.1:4173/
+        run: node tests/responsive-320-themes.mjs
+      - name: Upload 320px theme screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: responsive-320-theme-check
+          path: artifacts/320-theme-check/
+          if-no-files-found: warn
+          retention-days: 7
+      - name: Stress test 320px first-load layout with blocked and loaded fonts
+        env:
+          APP_URL: http://127.0.0.1:4173/
+        shell: bash
+        run: |
+          for attempt in $(seq 1 15); do
+            if (( attempt % 2 == 1 )); then
+              font_mode=blocked
+            else
+              font_mode=enabled
+            fi
+            echo "320px cold load $attempt/15 (Google Fonts: $font_mode)"
+            node tests/responsive-viewport-sweep.mjs --only-320 --font-mode="$font_mode" || exit $?
+          done

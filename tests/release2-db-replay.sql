@@ -161,6 +161,158 @@ select public.publish_pickle_session(
   '{"t":11,"courts":[],"nx":[],"q":["A","B","C","D"],"lb":[],"up":[{"n":"A","p":1}],"tm":{"a":240000}}'::jsonb
 );
 
+do $payload_validation$
+declare
+  v_msg text;
+  v_count integer;
+begin
+  begin
+    perform public.publish_pickle_session(
+      'R2BAD01', repeat('a',64), '[]'::jsonb
+    );
+    raise exception 'non-object session payload was accepted';
+  exception when others then
+    v_msg:=sqlerrm;
+    if v_msg <> 'Payload must be a JSON object.' then
+      raise exception 'non-object session payload unexpected error: %',v_msg;
+    end if;
+  end;
+
+  begin
+    perform public.publish_pickle_session(
+      'R2BAD02', repeat('a',64),
+      '{"t":11,"courts":[],"nx":[],"q":[5],"lb":[]}'::jsonb
+    );
+    raise exception 'non-string queue entry was accepted';
+  exception when others then
+    v_msg:=sqlerrm;
+    if v_msg <> 'Invalid Live View payload values.' then
+      raise exception 'invalid session item unexpected error: %',v_msg;
+    end if;
+  end;
+
+  select count(*) into v_count
+    from public.live_sessions
+   where code in ('R2BAD01','R2BAD02');
+  if v_count<>0 then
+    raise exception 'invalid Live View payloads wrote % rows',v_count;
+  end if;
+
+  begin
+    perform public.publish_pickle_results_v2(
+      'R2DB001', repeat('a',64), 'R2BADRES01', '[]'::jsonb
+    );
+    raise exception 'non-object results payload was accepted';
+  exception when others then
+    v_msg:=sqlerrm;
+    if v_msg <> 'Payload must be a JSON object.' then
+      raise exception 'non-object results payload unexpected error: %',v_msg;
+    end if;
+  end;
+
+  begin
+    perform public.publish_pickle_results_v2(
+      'R2DB001', repeat('a',64), 'R2BADRES02',
+      '{"v":1,"totals":{"players":1,"games":1},"leaderboard":[],"matches":[{"c":"Court 1","p":["A","B","C","D"],"s":["<img>",9],"w":0}]}'::jsonb
+    );
+    raise exception 'non-numeric results score was accepted';
+  exception when others then
+    v_msg:=sqlerrm;
+    if v_msg <> 'Invalid results match values.' then
+      raise exception 'invalid results score unexpected error: %',v_msg;
+    end if;
+  end;
+
+  select count(*) into v_count
+    from public.pickle_results
+   where live_code='R2DB001';
+  if v_count<>0 then
+    raise exception 'invalid archived-results payloads wrote % rows',v_count;
+  end if;
+end
+$payload_validation$;
+
+do $client_payload_contract$
+declare
+  v_payload jsonb;
+  v_bytes integer;
+begin
+  -- Matches sdata(): null timing metadata, empty next-up arrays, idle courts
+  -- with empty player arrays, plus unicode and pipe characters in names.
+  perform public.publish_pickle_session(
+    'R2SHAPE1', repeat('a',64),
+    jsonb_build_object(
+      't',11,'wb',2,
+      'courts',jsonb_build_array(
+        jsonb_build_object('n','Court 1','a',false,'p','[]'::jsonb,'s','[0,0]'::jsonb),
+        jsonb_build_object('n','Court 2','a',false,'p','[]'::jsonb,'s','[0,0]'::jsonb),
+        jsonb_build_object('n','Court 3','a',false,'p','[]'::jsonb,'s','[0,0]'::jsonb),
+        jsonb_build_object('n','Court 4','a',false,'p','[]'::jsonb,'s','[0,0]'::jsonb)
+      ),
+      'nx','[]'::jsonb,'up','[]'::jsonb,'tm',null,
+      'q',jsonb_build_array('Ari | 東京 🌱','Mika Café|星','Noah | 🥒','Zoë 北'),
+      'lb','[]'::jsonb
+    )
+  );
+
+  -- Build the upper supported client snapshot sizes to verify the 200 KB ceiling.
+  perform public.publish_pickle_session(
+    'R2BIG001', repeat('a',64),
+    '{"t":11,"wb":2,"courts":[],"nx":[],"up":[],"tm":null,"q":[],"lb":[]}'::jsonb
+  );
+
+  with names as (
+    select i, lpad(i::text,3,'0')||'|東京🌱' as n
+      from generate_series(1,200) i
+  ),
+  leaderboard as (
+    select jsonb_agg(jsonb_build_object('n',n,'w',25,'l',10,'d',150) order by i) as data
+      from names
+  ),
+  matches as (
+    select jsonb_agg(
+      jsonb_build_object(
+        'c','Court '||(((g-1)%8)+1),
+        'p',jsonb_build_array(
+          lpad((((g-1)*4+0)%200+1)::text,3,'0')||'|東京🌱',
+          lpad((((g-1)*4+1)%200+1)::text,3,'0')||'|東京🌱',
+          lpad((((g-1)*4+2)%200+1)::text,3,'0')||'|東京🌱',
+          lpad((((g-1)*4+3)%200+1)::text,3,'0')||'|東京🌱'
+        ),
+        's',jsonb_build_array(11,9),'w',0,'tg',11,'t',1760000000000+g,'d',600000
+      ) order by g
+    ) as data
+      from generate_series(1,500) g
+  )
+  select jsonb_build_object(
+    'v',1,'name','Open play | 終','totals',jsonb_build_object(
+      'players',200,'games',500,'courts',8,'playTo',11,'winBy',2
+    ),
+    'leaderboard',leaderboard.data,'matches',matches.data
+  )
+    into v_payload
+    from leaderboard,matches;
+
+  v_bytes:=octet_length(v_payload::text);
+  if jsonb_array_length(v_payload->'leaderboard')<>200
+     or jsonb_array_length(v_payload->'matches')<>500
+     or v_bytes>=200000 then
+    raise exception '200-player / 500-match result payload shape or size is invalid: % bytes',v_bytes;
+  end if;
+
+  perform public.publish_pickle_results_v2(
+    'R2BIG001', repeat('a',64), 'R2BIGRES01', v_payload
+  );
+
+  if not exists (
+    select 1 from public.pickle_results
+     where live_code='R2BIG001' and code='R2BIGRES01'
+  ) then
+    raise exception 'full-size client results payload was not stored';
+  end if;
+end
+$client_payload_contract$;
+
 select public.publish_pickle_results_v2(
   'R2DB001',
   repeat('a',64),

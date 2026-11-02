@@ -8,33 +8,85 @@ const VIEWPORTS = [
   [1023, 900], [1024, 800], [1279, 800], [1280, 800], [1440, 900],
   [1536, 960], [1800, 900], [1920, 1080],
 ];
+const ONLY_320 = process.argv.includes('--only-320');
+const FONT_MODE = process.argv.find(arg => arg.startsWith('--font-mode='))?.split('=')[1] || 'enabled';
+if (!['blocked', 'enabled'].includes(FONT_MODE)) throw new Error('Use --font-mode=blocked or --font-mode=enabled.');
+const TARGET_VIEWPORTS = ONLY_320 ? [[320, 740]] : VIEWPORTS;
 
 const browser = await chromium.launch({ headless: true });
 const context = await browser.newContext({
-  viewport: { width: 1280, height: 800 },
+  viewport: ONLY_320 ? { width: 320, height: 740 } : { width: 1280, height: 800 },
   serviceWorkers: 'block',
   locale: 'en-US',
 });
 const page = await context.newPage();
 
-// This is a layout-only test. Prevent any accidental remote database reads or writes.
+// This is a layout-only test. Prevent database access and deliberately control Google Fonts.
+const fontResponses = [];
+page.on('response', response => {
+  const url = new URL(response.url());
+  if (url.hostname === 'fonts.googleapis.com' || url.hostname === 'fonts.gstatic.com') {
+    fontResponses.push({ host: url.hostname, status: response.status() });
+  }
+});
 await context.route('**/*', route => {
   const url = new URL(route.request().url());
   if (url.hostname.endsWith('.supabase.co')) return route.abort();
+  if (FONT_MODE === 'blocked' &&
+      (url.hostname === 'fonts.googleapis.com' || url.hostname === 'fonts.gstatic.com')) return route.abort();
   return route.continue();
 });
 
 try {
-  await page.goto(APP_URL, { waitUntil: 'domcontentloaded', timeout: 30000 });
+  await page.goto(APP_URL, { waitUntil: 'load', timeout: 30000 });
   await page.locator('#app').waitFor({ state: 'visible', timeout: 10000 });
   await page.locator('#mnb').waitFor({ state: 'attached', timeout: 5000 });
+  // initMenu runs on a zero-delay timer and moves the export/import controls into #qmenu.
+  await page.locator('#qmenu #exp').waitFor({ state: 'attached', timeout: 10000 });
+  await page.locator('#qmenu #impbtn').waitFor({ state: 'attached', timeout: 10000 });
+
+  // Explicitly resolve the actual Oswald face rather than assuming the CSS request succeeded.
+  const fontProbe = await page.evaluate(async () => {
+    let faces = [];
+    let error = null;
+    try {
+      faces = await document.fonts.load('700 24px Oswald');
+    } catch (e) {
+      error = String(e && e.message || e);
+    }
+    await document.fonts.ready;
+    return {
+      requested: '700 24px Oswald',
+      faces: faces.map(face => ({ family: face.family, weight: face.weight, status: face.status })),
+      declaredOswaldFaces: Array.from(document.fonts)
+        .filter(face => /Oswald/i.test(face.family))
+        .map(face => ({ family: face.family, weight: face.weight, status: face.status })),
+      check: document.fonts.check('700 24px Oswald'),
+      error,
+    };
+  });
 
   const failures = [];
   const results = [];
 
-  for (const [width, height] of VIEWPORTS) {
+  if (FONT_MODE === 'blocked') {
+    if (fontResponses.length) failures.push({ font: 'blocked mode unexpectedly received Google Fonts responses', fontResponses });
+  } else {
+    const cssLoaded = fontResponses.some(r => r.host === 'fonts.googleapis.com' && r.status >= 200 && r.status < 300);
+    const binaryLoaded = fontResponses.some(r => r.host === 'fonts.gstatic.com' && r.status >= 200 && r.status < 300);
+    const oswaldLoaded = fontProbe.faces.some(face => /Oswald/i.test(face.family) && face.status === 'loaded');
+    if (!cssLoaded) failures.push({ font: 'Google Fonts stylesheet was not fetched successfully', fontResponses, fontProbe });
+    if (!binaryLoaded || !oswaldLoaded) failures.push({ font: 'Oswald web font did not load; enabled mode must exercise the web-font layout', fontResponses, fontProbe });
+  }
+
+  for (const [width, height] of TARGET_VIEWPORTS) {
     await page.setViewportSize({ width, height });
-    await page.evaluate(() => window.scrollTo(0, 0));
+    await page.evaluate(async () => {
+      // Wait for web fonts/icons and two paint frames after the resize before measuring.
+      await document.fonts.ready;
+      await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+      window.scrollTo(0, 0);
+    });
 
     const metrics = await page.evaluate(() => {
       const rect = el => {
@@ -46,6 +98,25 @@ try {
       const menuButton = document.querySelector('#mnb');
       const nav = document.querySelector('#nav');
       const visible = el => !!el && getComputedStyle(el).display !== 'none' && el.getClientRects().length > 0;
+      const firstOverflowingElement = [...document.querySelectorAll('body *')].find(el => {
+        const style = getComputedStyle(el);
+        if (style.display === 'none' || style.visibility === 'hidden' || el.getClientRects().length === 0) return false;
+        return el.getBoundingClientRect().right > innerWidth + 1;
+      });
+      const firstOverflowingElementInfo = firstOverflowingElement ? {
+        tag: firstOverflowingElement.tagName.toLowerCase(),
+        id: firstOverflowingElement.id || null,
+        class: firstOverflowingElement.getAttribute('class') || '',
+        rect: rect(firstOverflowingElement),
+        text: (firstOverflowingElement.innerText || firstOverflowingElement.textContent || '').replace(/\s+/g, ' ').trim().slice(0, 80),
+        children: [...firstOverflowingElement.children].map(child => ({
+          tag: child.tagName.toLowerCase(),
+          id: child.id || null,
+          class: child.getAttribute('class') || '',
+          rect: rect(child),
+          text: (child.innerText || child.textContent || '').replace(/\s+/g, ' ').trim().slice(0, 60),
+        })),
+      } : null;
       return {
         width: innerWidth,
         rootScrollWidth: document.documentElement.scrollWidth,
@@ -57,6 +128,7 @@ try {
         navVisible: visible(nav),
         navRect: rect(nav),
         appRect: rect(document.querySelector('#app')),
+        firstOverflowingElement: firstOverflowingElementInfo,
       };
     });
 
@@ -88,7 +160,14 @@ try {
     if (problems.length) failures.push({ viewport: width + 'x' + height, problems, metrics });
   }
 
-  console.log(JSON.stringify({ test: 'responsive viewport sweep', checked: results.length, results }, null, 2));
+  console.log(JSON.stringify({
+    test: 'responsive viewport sweep',
+    fontMode: FONT_MODE,
+    fontResponses,
+    fontProbe,
+    checked: results.length,
+    results
+  }, null, 2));
   assert.deepEqual(failures, [], 'Responsive layout failed at one or more viewport sizes.');
   console.log('PASS: all responsive viewport checks passed; Supabase requests were blocked.');
 } finally {
