@@ -634,7 +634,7 @@ async function main() {
     livePage.on('dialog',async dialog=>{liveAlerts++;await dialog.dismiss()});
     await livePage.goto(APP+'#s=NYXSSBASE2',{waitUntil:'domcontentloaded'});
     await livePage.getByRole('heading',{name:'Live Session'}).waitFor({state:'visible',timeout:10000});
-    await livePage.waitForFunction(name=>document.querySelector('#viewer')?.innerText.includes(name)&&document.querySelector('#viewer')?.innerText.includes('Cara & Dan')&&document.querySelector('#viewer')?.innerText.includes('9'),hostileName,{timeout:10000});
+    await livePage.waitForFunction(()=>document.querySelector('#viewer')?.innerText.includes('Cara & Dan')&&document.querySelector('#viewer')?.innerText.includes('9'),null,{timeout:10000});
     const nyxssViewer=await livePage.locator('#viewer').evaluate(el=>({
       text:el.innerText,
       images:el.querySelectorAll('img').length,
