@@ -1249,7 +1249,7 @@ async function main() {
     ]);
     dp.off('request',trackResultsExportPublish);
     assert.equal(resultsExportPublishCalls,0,'Exporting from Results must not call a publish RPC');
-    assert.match(resultsDownload.suggestedFilename(),/^queuezerotwo-sat-6pm-backup-\\d{4}-\\d{2}-\\d{2}\\.json$/);
+    assert.match(resultsDownload.suggestedFilename(),/^queuezerotwo-sat-6pm-backup-\d{4}-\d{2}-\d{2}\.json$/);
     await dp.locator('#msg').getByText('Backup exported. Live View control key excluded.').waitFor({state:'visible',timeout:5000});
     await resultsDownload.saveAs(finishedBackupPath);
     const finishedBackup=JSON.parse(fs.readFileSync(finishedBackupPath,'utf8'));
