@@ -621,6 +621,7 @@ async function main() {
     const liveContext=await browser.newContext({...devices['Desktop Chrome'],serviceWorkers:'block',locale:'en-US'});
     const hostileName='<img/src=x/onerror=alert(1)>';
     const hostileLiveScore='<img src=x onerror=alert(1)>';
+    // Separate whitespace-free SVG probe verifies the hostile DOM can execute a dialog event.
     const hostileLiveEvent='<svg/onload=alert(1)>';
     const livePayload={q:[],t:11,lb:[],nx:[],tm:null,up:[],wb:2,courts:[{a:true,n:'Court 1',p:[hostileName,'Bob','Cara','Dan'],s:[hostileLiveScore,9]},{a:true,n:'Court 2',p:[hostileLiveEvent,'Eve','Fox','Gray'],s:[7,5]}]};
     await liveContext.route(SUPABASE+'/**',route=>{
