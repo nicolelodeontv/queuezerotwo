@@ -687,7 +687,7 @@ function expData(){
   return JSON.stringify({app:'QueueZeroTwo',version:BACKUP_VERSION,exportedAt:new Date().toISOString(),state:o},null,2)
 }
 function backupNameSlug(value){
-  const cleaned=String(value??'').normalize('NFKC').replace(/[\u0000-\u001f\u007f-\u009f]/g,'').replace(/[\\/:*?"<>|]/g,'').replace(/\s+/g,' ').trim().replace(/^\.+/,'').trim();
+  const cleaned=String(value??'').normalize('NFKC').replace(/[\u0000-\u001f\u007f-\u009f]/g,'').replace(/[\x2f\\:*?"<>|]/g,'').replace(/\s+/g,' ').trim().replace(/^\.+/,'').trim();
   const slug=cleaned.toLowerCase().replace(/[^\p{L}\p{N}]+/gu,'-').replace(/^-+|-+$/g,'').slice(0,32).replace(/-+$/g,'');
   return slug||'session'
 }
