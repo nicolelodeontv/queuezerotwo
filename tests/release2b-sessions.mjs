@@ -1183,12 +1183,24 @@ async function main() {
     const finishDialog = dp.locator('[role="dialog"]');
     await finishDialog.getByRole('button', {name: 'Confirm'}).click();
     await dp.locator('#sn').waitFor({state:'visible',timeout:10000});
-    const finishedBackupJson=await dp.evaluate(() => expData());
-    fs.writeFileSync(finishedBackupPath,finishedBackupJson,'utf8');
-    const finishedBackup=JSON.parse(finishedBackupJson);
+    const resultsDialog=dp.locator('[role="dialog"]').last();
+    const exportButton=resultsDialog.getByRole('button',{name:'Export backup'});
+    assert.equal(await exportButton.count(),1,'The Results dialog exposes one Export backup action');
+    const [resultsDownload]=await Promise.all([
+      dp.waitForEvent('download'),
+      exportButton.click(),
+    ]);
+    assert.match(resultsDownload.suggestedFilename(),/^queuezerotwo-backup-\\d{4}-\\d{2}-\\d{2}\\.json$/);
+    await resultsDownload.saveAs(finishedBackupPath);
+    const finishedBackup=JSON.parse(fs.readFileSync(finishedBackupPath,'utf8'));
     assert.equal(finishedBackup.app, 'QueueZeroTwo');
+    assert.equal(finishedBackup.version, 1);
+    assert.equal(finishedBackup.state.ended, true);
     assert.equal(finishedBackup.state.log.length, 1);
     assert.equal(finishedBackup.state.log[0].p.length, 4);
+    assert.equal(Object.hasOwn(finishedBackup.state,'sid'),false,'Export excludes the live session ID');
+    assert.equal(Object.hasOwn(finishedBackup.state,'sh'),false,'Export excludes the host key');
+    assert.equal(Object.hasOwn(finishedBackup.state,'rid'),false,'Export excludes the results publication code');
 
     // Context 2: clean mobile device imports the same end-of-session backup and restores the scored log.
     await ip.goto(APP, {waitUntil:'networkidle'});
@@ -1459,6 +1471,7 @@ async function main() {
       topThreeStored: true,
       exportContainsHistory: true,
       manualExportButton: true,
+      resultsDialogExportButton: true,
       deleteWorks: true,
       importRestoresHistory: true,
       mobileScoring: true,
