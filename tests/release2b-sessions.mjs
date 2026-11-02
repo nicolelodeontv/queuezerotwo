@@ -619,7 +619,7 @@ async function main() {
 
     // #s=: Live View client rendering, independent of the database publish guard.
     const liveContext=await browser.newContext({...devices['Desktop Chrome'],serviceWorkers:'block',locale:'en-US'});
-    const hostileName='<img src=x onerror=alert(1)>';
+    const hostileName='<img/src=x/onerror=alert(1)>';
     const hostileLiveScore='<img src=x onerror=alert(1)>';
     const livePayload={q:[],t:11,lb:[],nx:[],tm:null,up:[],wb:2,courts:[{a:true,n:'Court 1',p:[hostileName,'Bob','Cara','Dan'],s:[hostileLiveScore,9]}]};
     await liveContext.route(SUPABASE+'/**',route=>{
