@@ -621,7 +621,8 @@ async function main() {
     const liveContext=await browser.newContext({...devices['Desktop Chrome'],serviceWorkers:'block',locale:'en-US'});
     const hostileName='<img/src=x/onerror=alert(1)>';
     const hostileLiveScore='<img src=x onerror=alert(1)>';
-    const livePayload={q:[],t:11,lb:[],nx:[],tm:null,up:[],wb:2,courts:[{a:true,n:'Court 1',p:[hostileName,'Bob','Cara','Dan'],s:[hostileLiveScore,9]}]};
+    const hostileLiveEvent='<svg/onload=alert(1)>';
+    const livePayload={q:[],t:11,lb:[],nx:[],tm:null,up:[],wb:2,courts:[{a:true,n:'Court 1',p:[hostileName,'Bob','Cara','Dan'],s:[hostileLiveScore,9]},{a:true,n:'Court 2',p:[hostileLiveEvent,'Eve','Fox','Gray'],s:[7,5]}]};
     await liveContext.route(SUPABASE+'/**',route=>{
       const u=new URL(route.request().url());
       if(u.pathname.endsWith('/rest/v1/live_sessions')&&route.request().method()==='GET'){
@@ -648,6 +649,7 @@ async function main() {
     xssCheck(liveAlerts===0,'#s= NYXSSBASE2 fired a JavaScript dialog');
     xssCheck(nyxssViewer.images===0&&nyxssViewer.svgs===0&&nyxssViewer.scripts===0,'#s= NYXSSBASE2 viewer contains an injected img, svg, or script element: '+JSON.stringify(nyxssViewer));
     xssCheck(nyxssViewer.text.includes(hostileName),'#s= hostile player name was not displayed as literal text');
+    xssCheck(nyxssViewer.text.includes(hostileLiveEvent+' & Eve\\n7\\nFox & Gray\\n5'),'#s= hostile SVG player name was not displayed as literal text');
     xssCheck(!nyxssViewer.text.includes(hostileLiveScore),'#s= hostile score was not normalized to zero');
     xssCheck(nyxssViewer.text.includes(hostileName+' & Bob\n0\nCara & Dan\n9'),'#s= hostile player name and hostile score did not render as literal text and zero');
     await liveContext.close();
