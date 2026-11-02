@@ -1267,6 +1267,7 @@ async function main() {
     // User-controlled names must never become unsafe path segments in downloaded filenames.
     for (const [inputName,expectedPrefix] of [
       ['a/b:c*?"<>|','queuezerotwo-abc-backup-'],
+      ['a\\b','queuezerotwo-ab-backup-'],
       ['😀🔥','queuezerotwo-session-backup-'],
       ['','queuezerotwo-session-backup-'],
     ]) {
@@ -1281,8 +1282,9 @@ async function main() {
     const slugChecks=await dp.evaluate(()=>({
       leadingDotsAndControls:backupNameSlug(String.fromCharCode(0)+'.. / '+String.fromCharCode(127)),
       collapsedWhitespace:backupNameSlug('   Weekly   Saturday   '),
+      backslashRemoved:backupNameSlug('a'+String.fromCharCode(92)+'b'),
     }));
-    assert.deepEqual(slugChecks,{leadingDotsAndControls:'session',collapsedWhitespace:'weekly-saturday'});
+    assert.deepEqual(slugChecks,{leadingDotsAndControls:'session',collapsedWhitespace:'weekly-saturday',backslashRemoved:'ab'});
     await resultsDialog.locator('#sn').fill('Sat 6pm');
     const finishedBackup=JSON.parse(fs.readFileSync(finishedBackupPath,'utf8'));
     assert.equal(finishedBackup.app, 'QueueZeroTwo');
@@ -1317,7 +1319,6 @@ async function main() {
       await dp.keyboard.press('Tab');
       if(await exportButton.evaluate(el=>el===document.activeElement)){exportReached=true;break}
     }
-    assert.equal(exportReached,true,'Export backup is included in the modal focus trap');
     assert.equal(exportReached,true,'Export backup is included in the modal focus trap');
     await dp.setViewportSize({width:639,height:800});
     assert.equal(await resultsDialog.locator('.qrb').evaluate(el=>getComputedStyle(el).display),'none','QR stays hidden below the sm breakpoint');
