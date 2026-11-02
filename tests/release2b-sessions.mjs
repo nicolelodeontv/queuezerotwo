@@ -619,7 +619,7 @@ async function main() {
 
     // #s=: Live View client rendering, independent of the database publish guard.
     const liveContext=await browser.newContext({...devices['Desktop Chrome'],serviceWorkers:'block',locale:'en-US'});
-    const hostileName='<img/src=x/onerror=alert(1)>';
+    const hostileName='<img/src/onerror=alert(1)>';
     const hostileLiveScore='<img src=x onerror=alert(1)>';
     const hostileLiveEvent='<svg/onload=alert(1)>';
     const livePayload={q:[],t:11,lb:[],nx:[],tm:null,up:[],wb:2,courts:[{a:true,n:'Court 1',p:[hostileName,'Bob','Cara','Dan'],s:[hostileLiveScore,9]},{a:true,n:'Court 2',p:[hostileLiveEvent,'Eve','Fox','Gray'],s:[7,5]}]};
@@ -631,8 +631,8 @@ async function main() {
       return route.abort();
     });
     const livePage=await liveContext.newPage();
-    let liveAlerts=0;
-    livePage.on('dialog',async dialog=>{liveAlerts++;await dialog.dismiss()});
+    const liveDialogs=[];
+    livePage.on('dialog',async dialog=>{liveDialogs.push(dialog.message());await dialog.dismiss()});
     await livePage.goto(APP+'#s=NYXSSBASE2',{waitUntil:'domcontentloaded'});
     await livePage.getByRole('heading',{name:'Live Session'}).waitFor({state:'visible',timeout:10000});
     await livePage.waitForFunction(()=>document.querySelector('#viewer')?.innerText.includes('Cara & Dan')&&document.querySelector('#viewer')?.innerText.includes('9'),null,{timeout:10000});
@@ -645,8 +645,8 @@ async function main() {
       svgs:el.querySelectorAll('svg').length,
       scripts:el.querySelectorAll('script').length
     }));
-    console.log('[NYXSSBASE2 viewer DOM check] '+JSON.stringify({...nyxssViewer,alertFired:liveAlerts>0}));
-    xssCheck(liveAlerts===0,'#s= NYXSSBASE2 fired a JavaScript dialog');
+    console.log('[NYXSSBASE2 viewer DOM check] '+JSON.stringify({...nyxssViewer,dialogs:liveDialogs}));
+    xssCheck(liveDialogs.length===0,'#s= NYXSSBASE2 fired a JavaScript dialog: '+JSON.stringify(liveDialogs));
     xssCheck(nyxssViewer.images===0&&nyxssViewer.svgs===0&&nyxssViewer.scripts===0,'#s= NYXSSBASE2 viewer contains an injected img, svg, or script element: '+JSON.stringify(nyxssViewer));
     xssCheck(nyxssViewer.text.includes(hostileName),'#s= hostile player name was not displayed as literal text');
     xssCheck(nyxssViewer.text.includes(hostileLiveEvent+' & Eve\n7\nFox & Gray\n5'),'#s= hostile SVG player name was not displayed as literal text');
