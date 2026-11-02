@@ -635,9 +635,12 @@ async function main() {
     await livePage.goto(APP+'#s=NYXSSBASE2',{waitUntil:'domcontentloaded'});
     await livePage.getByRole('heading',{name:'Live Session'}).waitFor({state:'visible',timeout:10000});
     await livePage.waitForFunction(()=>document.querySelector('#viewer')?.innerText.includes('Cara & Dan')&&document.querySelector('#viewer')?.innerText.includes('9'),null,{timeout:10000});
+    await livePage.waitForFunction(()=>{const images=[...document.querySelectorAll('#viewer img')];return images.length===0||images.every(image=>image.complete)},null,{timeout:5000});
+    await livePage.waitForTimeout(50);
     const nyxssViewer=await livePage.locator('#viewer').evaluate(el=>({
       text:el.innerText,
       images:el.querySelectorAll('img').length,
+      imageDetails:[...el.querySelectorAll('img')].map(image=>({html:image.outerHTML,complete:image.complete,naturalWidth:image.naturalWidth,onerrorType:typeof image.onerror})),
       svgs:el.querySelectorAll('svg').length,
       scripts:el.querySelectorAll('script').length
     }));
