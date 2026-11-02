@@ -1296,6 +1296,10 @@ async function main() {
     assert.equal(Object.hasOwn(finishedBackup.state,'sh'),false,'Export excludes the host key');
     assert.equal(Object.hasOwn(finishedBackup.state,'rid'),false,'Export excludes the results publication code');
 
+    // Supply a local-only results code so the QR branch exists without making a publish RPC.
+    await dp.evaluate(()=>{S.rr=true;S.lr=false;S.rid='QRTEST1234';showRes()});
+    await dp.locator('[role="dialog"]').last().locator('.qrb').waitFor({state:'attached',timeout:5000});
+
     // The locked Results dialog stays usable on a narrow phone viewport.
     await dp.setViewportSize({width:320,height:640});
     assert.equal(await resultsDialog.locator('.qrb').evaluate(el=>getComputedStyle(el).display),'none','QR is hidden at phone width');
