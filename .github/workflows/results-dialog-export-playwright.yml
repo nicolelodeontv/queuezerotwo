@@ -23,6 +23,8 @@ jobs:
           node-version: 22
       - run: npm install --no-audit --no-fund
       - run: npm run build:css
+      - name: Audit production dependencies only
+        run: npm audit --omit=dev
       - name: Check Release 2 Playwright test syntax
         run: node --check tests/release2b-sessions.mjs
       - run: npm install --no-save playwright@1.55.0
