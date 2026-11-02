@@ -78,12 +78,12 @@ async function setupFour(page) {
   assert.equal(await page.locator('#qc').innerText(), '4');
 }
 
-async function simulateV25ToV29(browser) {
+async function simulateV25ToV30(browser) {
   const context = await browser.newContext({...devices['Desktop Chrome'],serviceWorkers:'allow',locale:'en-US'});
   const page = await context.newPage();
   let swFetch = 0;
   const currentSw = fs.readFileSync(path.resolve('sw.js'), 'utf8');
-  assert.match(currentSw,/queuezerotwo-v29/);
+  assert.match(currentSw,/queuezerotwo-v30/);
   const oldV25 = `const V='queuezerotwo-v25';self.addEventListener('install',e=>e.waitUntil(caches.open(V).then(c=>c.put('/__queuezerotwo_v25_sentinel__',new Response('v25'))).then(()=>self.skipWaiting())));self.addEventListener('activate',e=>e.waitUntil(self.clients.claim()));`;
   await context.route('**/sw.js', async route => {
     swFetch++;
@@ -98,7 +98,7 @@ async function simulateV25ToV29(browser) {
   await page.evaluate(async()=>{const r=await navigator.serviceWorker.getRegistration();await r.update()});
   await page.waitForFunction(async()=>{
     const r=await navigator.serviceWorker.getRegistration();
-    return !!r?.waiting || await caches.has('queuezerotwo-v29');
+    return !!r?.waiting || await caches.has('queuezerotwo-v30');
   },null,{timeout:10000});
   await page.evaluate(async()=>{
     const r=await navigator.serviceWorker.getRegistration();
@@ -106,11 +106,11 @@ async function simulateV25ToV29(browser) {
   });
   await page.waitForFunction(async()=>{
     const r=await navigator.serviceWorker.getRegistration();
-    return !!r && !r.waiting && r.active?.state==='activated' && await caches.has('queuezerotwo-v29');
+    return !!r && !r.waiting && r.active?.state==='activated' && await caches.has('queuezerotwo-v30');
   },null,{timeout:10000});
   await page.reload({waitUntil:'networkidle'});
   const out=await page.evaluate(async()=>{
-    const cache=await caches.open('queuezerotwo-v29');
+    const cache=await caches.open('queuezerotwo-v30');
     return {
       queue:JSON.parse(localStorage.getItem('queuezerotwo-publish-queue-v1')||'{"items":[]}').items,
       state:JSON.parse(localStorage.getItem('pickleStackState')||'{}'),
@@ -128,12 +128,12 @@ async function simulateV25ToV29(browser) {
   await context.close();
 }
 
-async function simulateV26ToV29(browser) {
+async function simulateV26ToV30(browser) {
   const context = await browser.newContext({...devices['Desktop Chrome'],serviceWorkers:'allow',locale:'en-US'});
   const page = await context.newPage();
   let swFetch = 0;
   const currentSw = fs.readFileSync(path.resolve('sw.js'), 'utf8');
-  assert.match(currentSw,/queuezerotwo-v29/);
+  assert.match(currentSw,/queuezerotwo-v30/);
   const oldV26 = `const V='queuezerotwo-v26';self.addEventListener('install',e=>e.waitUntil(caches.open(V).then(c=>c.put('/__queuezerotwo_v26_sentinel__',new Response('v26'))).then(()=>self.skipWaiting())));self.addEventListener('activate',e=>e.waitUntil(self.clients.claim()));`;
   await context.route('**/sw.js', async route => {
     swFetch++;
@@ -148,7 +148,7 @@ async function simulateV26ToV29(browser) {
   await page.evaluate(async()=>{const r=await navigator.serviceWorker.getRegistration();await r.update()});
   await page.waitForFunction(async()=>{
     const r=await navigator.serviceWorker.getRegistration();
-    return !!r?.waiting || await caches.has('queuezerotwo-v29');
+    return !!r?.waiting || await caches.has('queuezerotwo-v30');
   },null,{timeout:10000});
   await page.evaluate(async()=>{
     const r=await navigator.serviceWorker.getRegistration();
@@ -156,15 +156,65 @@ async function simulateV26ToV29(browser) {
   });
   await page.waitForFunction(async()=>{
     const r=await navigator.serviceWorker.getRegistration();
-    return !!r && !r.waiting && r.active?.state==='activated' && await caches.has('queuezerotwo-v29');
+    return !!r && !r.waiting && r.active?.state==='activated' && await caches.has('queuezerotwo-v30');
   },null,{timeout:10000});
   await page.reload({waitUntil:'networkidle'});
   const out=await page.evaluate(async()=>{
-    const cache=await caches.open('queuezerotwo-v29');
+    const cache=await caches.open('queuezerotwo-v30');
     return {
       queue:JSON.parse(localStorage.getItem('queuezerotwo-publish-queue-v1')||'{"items":[]}').items,
       state:JSON.parse(localStorage.getItem('pickleStackState')||'{}'),
       oldCache:await caches.has('queuezerotwo-v26'),
+      profilesCached:!!(await cache.match('/profiles.js'))
+    };
+  });
+  assert.equal(out.oldCache,false);
+  assert.equal(out.profilesCached,true,'profiles.js is present in the offline shell cache');
+  assert.equal(out.queue.length,1);
+  assert.equal(out.queue[0].sid,'PERSISTEDSID');
+  assert.match(out.queue[0].id,/^[0-9a-f]{32}$/);
+  assert.equal(out.state.queue[0],'Persisted player');
+  assert.equal(out.state.sid,'PERSISTEDSID');
+  await context.close();
+}
+
+async function simulateV29ToV30(browser) {
+  const context = await browser.newContext({...devices['Desktop Chrome'],serviceWorkers:'allow',locale:'en-US'});
+  const page = await context.newPage();
+  let swFetch = 0;
+  const currentSw = fs.readFileSync(path.resolve('sw.js'), 'utf8');
+  assert.match(currentSw,/queuezerotwo-v30/);
+  const oldV29 = `const V='queuezerotwo-v29';self.addEventListener('install',e=>e.waitUntil(caches.open(V).then(c=>c.put('/__queuezerotwo_v29_sentinel__',new Response('v29'))).then(()=>self.skipWaiting())));self.addEventListener('activate',e=>e.waitUntil(self.clients.claim()));`;
+  await context.route('**/sw.js', async route => {
+    swFetch++;
+    await route.fulfill({status:200,contentType:'application/javascript',body:swFetch===1?oldV29:currentSw});
+  });
+  await page.goto(APP,{waitUntil:'networkidle'});
+  await page.waitForFunction(()=>!!navigator.serviceWorker?.controller,null,{timeout:5000});
+  await page.evaluate(()=>{
+    localStorage.setItem('pickleStackState',JSON.stringify({courts:[{id:1,name:'Court 1',isActive:false,players:[],score:[0,0],mid:'',t:0}],queue:['Persisted player'],waiting:[],rest:{},log:[],target:11,lv:{},md:'bal',sd:0,gp:{},wt:{},ws:false,wl:2,eq:false,tts:false,hap:true,sid:'PERSISTEDSID',sh:'a'.repeat(64)}));
+    localStorage.setItem('queuezerotwo-publish-queue-v1',JSON.stringify({v:1,seq:1,items:[{seq:1,sid:'PERSISTEDSID',sh:'a'.repeat(64),kind:'state',attempts:0,lastError:'',payload:{t:11,q:['Persisted player'],courts:[],nx:[],lb:[]}}]}));
+  });
+  await page.evaluate(async()=>{const r=await navigator.serviceWorker.getRegistration();await r.update()});
+  await page.waitForFunction(async()=>{
+    const r=await navigator.serviceWorker.getRegistration();
+    return !!r?.waiting || await caches.has('queuezerotwo-v30');
+  },null,{timeout:10000});
+  await page.evaluate(async()=>{
+    const r=await navigator.serviceWorker.getRegistration();
+    if(r?.waiting)r.waiting.postMessage('SKIP_WAITING');
+  });
+  await page.waitForFunction(async()=>{
+    const r=await navigator.serviceWorker.getRegistration();
+    return !!r && !r.waiting && r.active?.state==='activated' && await caches.has('queuezerotwo-v30');
+  },null,{timeout:10000});
+  await page.reload({waitUntil:'networkidle'});
+  const out=await page.evaluate(async()=>{
+    const cache=await caches.open('queuezerotwo-v30');
+    return {
+      queue:JSON.parse(localStorage.getItem('queuezerotwo-publish-queue-v1')||'{"items":[]}').items,
+      state:JSON.parse(localStorage.getItem('pickleStackState')||'{}'),
+      oldCache:await caches.has('queuezerotwo-v29'),
       profilesCached:!!(await cache.match('/profiles.js'))
     };
   });
@@ -422,8 +472,9 @@ async function main() {
   await Promise.all([desktop,iphone,pixel].map(context=>context.tracing.start({screenshots:true,snapshots:true,sources:true})));
   const syncPublishes = [];
   const resultPublishes = [];
-  await simulateV25ToV29(browser);
-  await simulateV26ToV29(browser);
+  await simulateV25ToV30(browser);
+  await simulateV26ToV30(browser);
+  await simulateV29ToV30(browser);
   await avatarProfileRegression(browser);
   await leaderboardPodiumRegression(browser);
   await durableQueueCompactionRegression(browser);
@@ -1184,6 +1235,7 @@ async function main() {
     await finishDialog.getByRole('button', {name: 'Confirm'}).click();
     await dp.locator('#sn').waitFor({state:'visible',timeout:10000});
     const resultsDialog=dp.locator('[role="dialog"]').last();
+    await resultsDialog.locator('#sn').fill('Sat 6pm');
     const exportButton=resultsDialog.getByRole('button',{name:'Export backup'});
     assert.equal(await exportButton.count(),1,'The Results dialog exposes one Export backup action');
     let resultsExportPublishCalls=0;
@@ -1197,7 +1249,8 @@ async function main() {
     ]);
     dp.off('request',trackResultsExportPublish);
     assert.equal(resultsExportPublishCalls,0,'Exporting from Results must not call a publish RPC');
-    assert.match(resultsDownload.suggestedFilename(),/^queuezerotwo-backup-\d{4}-\d{2}-\d{2}\.json$/);
+    assert.match(resultsDownload.suggestedFilename(),/^queuezerotwo-sat-6pm-backup-\\d{4}-\\d{2}-\\d{2}\\.json$/);
+    await dp.locator('#msg').getByText('Backup exported. Live View control key excluded.').waitFor({state:'visible',timeout:5000});
     await resultsDownload.saveAs(finishedBackupPath);
     const finishedBackup=JSON.parse(fs.readFileSync(finishedBackupPath,'utf8'));
     assert.equal(finishedBackup.app, 'QueueZeroTwo');
@@ -1209,13 +1262,41 @@ async function main() {
     assert.equal(Object.hasOwn(finishedBackup.state,'sh'),false,'Export excludes the host key');
     assert.equal(Object.hasOwn(finishedBackup.state,'rid'),false,'Export excludes the results publication code');
 
+    // The locked Results dialog stays usable on a narrow phone viewport.
+    await dp.setViewportSize({width:320,height:640});
+    for (const [selector,label] of [['.sh','Share results image'],['.rb','Export backup'],['.nw','New session']]) {
+      const button=resultsDialog.locator(selector);
+      await button.waitFor({state:'visible',timeout:5000});
+      assert.equal(await button.isVisible(),true,label+' remains visible at 320px');
+      const rect=await button.evaluate(el=>{const r=el.getBoundingClientRect();return {x:r.x,y:r.y,right:r.right,bottom:r.bottom,height:r.height}});
+      assert.ok(rect.x>=0&&rect.right<=320&&rect.y>=0&&rect.bottom<=640,label+' stays inside the 320px viewport');
+      assert.ok(rect.height>=44,label+' meets the 44px touch target');
+    }
+    const firstFocus=resultsDialog.locator('#sn');
+    const lastFocus=resultsDialog.locator('.nw');
+    await firstFocus.focus();
+    await dp.keyboard.press('Shift+Tab');
+    assert.equal(await lastFocus.evaluate(el=>el===document.activeElement),true,'Shift+Tab from the first control wraps to New session');
+    await dp.keyboard.press('Tab');
+    assert.equal(await firstFocus.evaluate(el=>el===document.activeElement),true,'Tab from New session wraps to the first control');
+    let exportReached=false;
+    for(let i=0;i<8;i++){
+      await dp.keyboard.press('Tab');
+      if(await exportButton.evaluate(el=>el===document.activeElement)){exportReached=true;break}
+    }
+    assert.equal(exportReached,true,'Export backup is included in the modal focus trap');
+    await dp.setViewportSize({width:1280,height:800});
+
     // Context 2: clean mobile device imports the same end-of-session backup and restores the scored log.
     await ip.goto(APP, {waitUntil:'networkidle'});
     await ip.evaluate(() => localStorage.clear());
     await ip.reload({waitUntil:'networkidle'});
     await ip.locator('#imp').setInputFiles(finishedBackupPath);
     await ip.getByRole('button', {name: 'Confirm'}).click();
-    await ip.waitForFunction(() => S.log.length === 1 && S.log[0].p.length === 4, null, {timeout:5000});
+    await ip.waitForFunction(() => S.name === 'Sat 6pm' && S.log.length === 1 && S.log[0].p.length === 4, null, {timeout:5000});
+    assert.equal(await ip.evaluate(() => S.name),'Sat 6pm','Import restores the session name');
+    assert.equal(await ip.evaluate(() => S.log.length),1,'Import restores the match log');
+    assert.deepEqual(await ip.evaluate(() => S.log[0].p),['Alpha','Beta','Gamma','Delta']);
 
     // Avoid creating persistent production/Supabase test sessions. The release-2b
     // history behavior is local-device functionality, so the test blocks Supabase.
@@ -1479,6 +1560,9 @@ async function main() {
       exportContainsHistory: true,
       manualExportButton: true,
       resultsDialogExportButton: true,
+      resultsDialogExport320pxAndFocusTrap: true,
+      resultsBackupRestoresNameAndMatchLog: true,
+      serviceWorkerV25V26V29UpgradeToV30: true,
       deleteWorks: true,
       importRestoresHistory: true,
       mobileScoring: true,
