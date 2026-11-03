@@ -218,7 +218,7 @@ html[data-theme=light]{color-scheme:light}
 <div><h1 class="text-2xl font-bold text-white leading-none">Queue<span class="text-pickle-500">ZeroTwo</span></h1><p class="text-xs text-gray-400 font-medium">PICKLEBALL QUEUE & COURT ROTATION</p></div>
 </div>
 <div class="flex items-center gap-2"><button onclick="hist()" title="Past sessions" class="bg-dark-700 hover:bg-pickle-500 hover:text-dark-900 rounded-lg w-10 h-10"><i class="fa-solid fa-clock-rotate-left"></i></button><button onclick="stand()" title="Standings" class="bg-dark-700 hover:bg-pickle-500 hover:text-dark-900 rounded-lg w-10 h-10"><i class="fa-solid fa-trophy"></i></button><button id="snb" onclick="snd()" title="Sound" class="bg-dark-700 rounded-lg w-10 h-10"></button><button id="hpb" onclick="hapt()" title="Vibration" class="bg-dark-700 rounded-lg w-10 h-10"></button><button id="thb" onclick="theme()" title="Light or dark theme" class="bg-dark-700 rounded-lg w-10 h-10"></button><button id="tsb" onclick="tts()" title="Voice announcements" class="bg-dark-700 rounded-lg w-10 h-10"></button><button onclick="openFaq()" title="How it works" class="bg-dark-700 hover:bg-pickle-500 hover:text-dark-900 rounded-lg w-10 h-10"><i class="fa-solid fa-circle-question"></i></button><button id="exp" type="button" class="bg-dark-700 hover:bg-dark-900 border border-dark-700 text-gray-200 rounded-lg px-3 h-10 text-sm" title="Export a backup of this device's QueueZeroTwo data"><i class="fa-solid fa-download"></i> <span class="hidden sm:inline">Export</span></button><button id="impbtn" type="button" class="bg-dark-700 hover:bg-dark-900 border border-dark-700 text-gray-200 rounded-lg px-3 h-10 text-sm" title="Import a QueueZeroTwo backup"><i class="fa-solid fa-upload"></i> <span class="hidden sm:inline">Import</span></button><button onclick="live()" class="bg-blue-600 hover:bg-blue-500 text-white font-semibold rounded-lg px-3 h-10 text-sm" title="Open a read-only live view for players"><i class="fa-solid fa-tower-broadcast"></i> <span class="hidden sm:inline">Live View</span></button></div>
-<div class="text-sm text-gray-400 flex items-center gap-2 bg-dark-900 py-1 px-3 rounded-full border border-dark-700"><i class="fa-solid fa-wifi text-green-400" id="ci"></i><span id="ct" class="hidden sm:inline">Saved on this device</span></div>
+<div role="button" tabindex="0" aria-label="Open Live View diagnostics" title="Open Live View diagnostics" onclick="openLiveDiagnostics()" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();openLiveDiagnostics()}" class="text-sm text-gray-400 flex items-center gap-2 bg-dark-900 py-1 px-3 rounded-full border border-dark-700 cursor-pointer"><i class="fa-solid fa-wifi text-green-400" id="ci"></i><span id="ct" class="hidden sm:inline">Saved on this device</span></div>
 </div>
 </header>
 <div id="msg" role="status" aria-live="polite" class="fixed top-24 left-1/2 -translate-x-1/2 z-50 w-full max-w-sm px-4 pointer-events-none flex flex-col gap-2"></div><div id="sr" class="sr-only" role="status" aria-live="polite"></div><input id="imp" type="file" accept="application/json,.json" hidden>
@@ -311,6 +311,45 @@ let PQ=[],PQS=0,PQBusy=false,PQRetry=null,PQInflightId=null;
 let PublishRejected='';
 const PublishRejectedNotified=new Set();
 const StorageFailures=new Set();
+const LIVE_HOST_DIAG_KEY='queuezerotwo-live-host-diagnostics-v1';
+function newHostDiagnostics(sid){return {v:1,sid:String(sid||''),attempts:0,retries:0,successes:0,failures:0,lastAttemptAt:0,lastSuccessAt:0,lastSuccessSeq:null,lastAttemptSeq:null,lastError:'',lastErrorAt:0}}
+function readHostDiagnostics(sid=String(S&&S.sid||'')){
+ const fresh=newHostDiagnostics(sid);
+ try{
+  const saved=JSON.parse(localStorage.getItem(LIVE_HOST_DIAG_KEY)||'null');
+  if(!saved||saved.v!==1||saved.sid!==fresh.sid)return fresh;
+  for(const k of ['attempts','retries','successes','failures'])fresh[k]=Math.max(0,Number(saved[k])||0);
+  for(const k of ['lastAttemptAt','lastSuccessAt','lastErrorAt'])fresh[k]=Math.max(0,Number(saved[k])||0);
+  fresh.lastSuccessSeq=Number.isSafeInteger(saved.lastSuccessSeq)?saved.lastSuccessSeq:null;
+  fresh.lastAttemptSeq=Number.isSafeInteger(saved.lastAttemptSeq)?saved.lastAttemptSeq:null;
+  fresh.lastError=typeof saved.lastError==='string'?saved.lastError.slice(0,180):'';
+ }catch(e){}
+ return fresh;
+}
+function updateHostDiagnostics(sid,update){
+ const d=readHostDiagnostics(sid);update(d);
+ try{localStorage.setItem(LIVE_HOST_DIAG_KEY,JSON.stringify(d))}catch(e){}
+ return d;
+}
+function trackedLivePublish(sid,sh,payload,attempt=1){
+ const seq=Number.isSafeInteger(payload&&payload.seq)?payload.seq:null;
+ updateHostDiagnostics(sid,d=>{d.attempts++;if(attempt>1)d.retries++;d.lastAttemptAt=Date.now();d.lastAttemptSeq=seq});
+ return sb.rpc('publish_pickle_session',{p_code:sid,p_host_key:sh,p_payload:payload}).then(q=>{
+  updateHostDiagnostics(sid,d=>{
+   if(q.error){d.failures++;d.lastError=String(q.error.message||'Publish failed').slice(0,180);d.lastErrorAt=Date.now()}
+   else{d.successes++;d.lastSuccessAt=Date.now();d.lastSuccessSeq=seq;d.lastError='';d.lastErrorAt=0}
+  });
+  return q;
+ }).catch(error=>{
+  updateHostDiagnostics(sid,d=>{d.failures++;d.lastError=String(error&&error.message||'Network request failed').slice(0,180);d.lastErrorAt=Date.now()});
+  return {error:{message:String(error&&error.message||'Network request failed')}};
+ });
+}
+function viewerDiagnostics(){
+ if(!SV)return null;
+ if(!SV.diag)SV.diag={broadcastsReceived:0,broadcastsAccepted:0,acceptedUpdates:0,snapshotsLoaded:0,snapshotFetches:0,snapshotErrors:0,staleUpdates:0,invalidPayloads:0,reconnectAttempts:0,channelErrors:0,lastBroadcastAt:0,lastUpdateAt:0,lastRejectedAt:0,lastRejectedSeq:null,lastAcceptedSeq:null,lastError:'',arrivalAges:[]};
+ return SV.diag;
+}
 function storageWriteFailed(kind){
   const first=!StorageFailures.has(kind);
   StorageFailures.add(kind);
@@ -397,7 +436,7 @@ async function publishQueuedItem(item){
   if(item.kind==='results'&&item.rid){
     q=await sb.rpc('publish_pickle_results_v2',{p_live_code:item.sid,p_host_key:item.sh,p_results_code:item.rid,p_payload:item.payload});
   }else{
-    q=await sb.rpc('publish_pickle_session',{p_code:item.sid,p_host_key:item.sh,p_payload:item.payload});
+    q=await trackedLivePublish(item.sid,item.sh,item.payload,item.attempts);
   }
   const msg=String(q.error&&q.error.message||'').trim();
   const sameHost=item.sid===S.sid&&item.sh===S.sh&&!S.ho;
@@ -422,7 +461,7 @@ async function publishQueuedItem(item){
     });
     item.sid=nid;item.sh=nkey;
     persistStateOnly();savePublishQueue();
-    q=await sb.rpc('publish_pickle_session',{p_code:item.sid,p_host_key:item.sh,p_payload:item.payload});
+    q=await trackedLivePublish(item.sid,item.sh,item.payload,item.attempts+1);
     if(!q.error)toast('The previous Live View expired. A new link is ready to share.','info')
   }
   return q
@@ -553,6 +592,62 @@ function ask(t,m,fn){
   const d=modal('<div class="p-6 text-center"><h3 class="text-xl text-white mb-2">'+esc(t)+'</h3><p class="text-gray-400 text-sm mb-6">'+esc(m)+'</p><div class="flex gap-3"><button data-x class="flex-1 '+bS+'">Cancel</button><button class="y flex-1 '+bD+'">Confirm</button></div></div>');
   d.querySelector('.y').onclick=()=>{d.__close();fn()}
 }
+function diagnosticTime(value){return value?new Date(value).toLocaleString():'Not yet'}
+function diagnosticAge(value){
+ if(!value)return '—';
+ const seconds=Math.max(0,Math.floor((Date.now()-value)/1000));
+ return seconds<60?seconds+'s ago':seconds<3600?Math.floor(seconds/60)+'m ago':Math.floor(seconds/3600)+'h ago';
+}
+function diagnosticRow(label,value){return '<div class="flex items-start justify-between gap-4 py-2 border-b border-dark-700 last:border-0"><span class="text-xs text-gray-400">'+esc(label)+'</span><span class="text-xs text-right text-white break-words">'+esc(String(value))+'</span></div>'}
+function openLiveDiagnostics(){
+ const viewer=!!SV;let rows='',subtitle='';
+ if(viewer){
+  const m=viewerDiagnostics(),ages=m.arrivalAges||[];
+  const average=ages.length?Math.round(ages.reduce((a,b)=>a+b,0)/ages.length):null;
+  const maximum=ages.length?Math.max(...ages):null;
+  subtitle='Viewer-side measurements from this browser tab. Arrival age uses the database update timestamp; it is not pure network transport time.';
+  rows=[
+   diagnosticRow('Connection',String(SV.status||'CONNECTING')),
+   diagnosticRow('Current sequence',SV.d&&Number.isSafeInteger(SV.d.seq)?SV.d.seq:'Legacy / not loaded'),
+   diagnosticRow('Last accepted update',diagnosticTime(m.lastUpdateAt)+' · '+diagnosticAge(m.lastUpdateAt)),
+   diagnosticRow('Last Broadcast received',diagnosticTime(m.lastBroadcastMessageAt)+' · '+diagnosticAge(m.lastBroadcastMessageAt)),
+   diagnosticRow('Last Broadcast accepted',diagnosticTime(m.lastBroadcastAt)+' · '+diagnosticAge(m.lastBroadcastAt)),
+   diagnosticRow('Average arrival age',average===null?'No samples':average+' ms'),
+   diagnosticRow('Maximum arrival age',maximum===null?'No samples':maximum+' ms'),
+   diagnosticRow('Broadcast messages',m.broadcastsReceived+' received · '+m.broadcastsAccepted+' accepted'),
+   diagnosticRow('Snapshot fetches',m.snapshotsLoaded+' loaded · '+m.snapshotErrors+' errors'),
+   diagnosticRow('Stale updates ignored',m.staleUpdates),
+   diagnosticRow('Invalid payloads rejected',m.invalidPayloads),
+   diagnosticRow('Reconnect attempts',m.reconnectAttempts),
+   diagnosticRow('Channel errors',m.channelErrors),
+   diagnosticRow('Last rejected sequence',m.lastRejectedSeq===null?'—':m.lastRejectedSeq),
+   diagnosticRow('Last connection error',m.lastError||'None')
+  ].join('');
+ }else{
+  const sid=String(S.sid||''),m=readHostDiagnostics(sid);
+  const pending=PQ.filter(x=>x.sid===sid&&x.sh===S.sh&&x.kind==='state');
+  const maxAttempts=pending.reduce((n,x)=>Math.max(n,Number(x.attempts)||0),0);
+  const status=!sb?'Unavailable':!navigator.onLine?'Offline':pending.length?'Sync pending':m.lastError?'Last publish failed':sid?'Ready':'Not started';
+  subtitle='Host-side publish measurements saved on this device. The host key is never shown or stored in this diagnostics record.';
+  rows=[
+   diagnosticRow('Publishing status',status),
+   diagnosticRow('Live View code',sid||'Not created'),
+   diagnosticRow('Current host sequence',Number.isSafeInteger(S.liveSeq)?S.liveSeq:0),
+   diagnosticRow('Last successful sequence',m.lastSuccessSeq===null?'—':m.lastSuccessSeq),
+   diagnosticRow('Last successful publish',diagnosticTime(m.lastSuccessAt)+' · '+diagnosticAge(m.lastSuccessAt)),
+   diagnosticRow('Last publish attempt',diagnosticTime(m.lastAttemptAt)+' · '+diagnosticAge(m.lastAttemptAt)),
+   diagnosticRow('Publish attempts',m.attempts),
+   diagnosticRow('Successful publishes',m.successes),
+   diagnosticRow('Failed publishes',m.failures),
+   diagnosticRow('Retries',m.retries),
+   diagnosticRow('Pending Live View snapshots',pending.length),
+   diagnosticRow('Highest pending attempt count',maxAttempts),
+   diagnosticRow('Last publish error',m.lastError||'None')
+  ].join('');
+ }
+ const d=modal('<div class="p-5"><div class="flex items-start justify-between gap-3 mb-1"><h3 class="text-xl text-white">Live View diagnostics</h3><span class="text-[10px] font-bold text-blue-300 bg-blue-500/10 border border-blue-500/20 rounded-full px-2 py-1">READ ONLY</span></div><p class="text-xs text-gray-400 mb-3">'+esc(subtitle)+'</p><div class="divide-y divide-dark-700">'+rows+'</div><div class="flex gap-2 mt-4"><button class="refresh flex-1 '+bS+'">Refresh</button><button data-x class="flex-1 '+bP+'">Close</button></div></div>');
+ d.querySelector('.refresh').onclick=()=>{d.__close();openLiveDiagnostics()};
+}
 const qrSvg=u=>{try{const q=qrcode(0,'M');q.addData(u);q.make();return q.createSvgTag({cellSize:6,margin:0,scalable:true})}catch(e){return ''}};
 async function live(){
   if(S.ended)return showRes();S.ho=false;
@@ -563,10 +658,10 @@ async function live(){
   if(q.error)return toast('Publish failed: '+q.error.message,'error');
   dropPublishQueue(S.sid,S.sh);
   save();const url=location.origin+location.pathname+'#s='+S.sid;
-  const d=modal('<div class="p-6 text-center"><div class="flex items-center justify-center gap-2 mb-1"><h3 class="text-xl text-white">Live View</h3><span class="text-[10px] font-bold text-blue-300 bg-blue-500/10 border border-blue-500/20 rounded-full px-2 py-1">VIEW ONLY</span></div><p class="text-xs text-gray-400 mb-4">Players can scan the QR code or open the link to watch courts, Up Next, the stack and leaderboard in real time. Player names and scores are visible to anyone with the link, and the session expires after 7 days.</p><div class="qrb bg-white p-3 rounded-xl mx-auto" style="width:200px;max-width:100%">'+qrSvg(url)+'</div><div class="mt-4 bg-dark-900 border border-dark-700 rounded-lg px-3 py-2 text-xs text-gray-300 break-all">'+esc(url)+'</div><div class="grid grid-cols-1 sm:grid-cols-3 gap-3 mt-4"><button class="cp '+bS+'">Copy link</button><button class="sh '+bP+'">Share</button><button class="op '+bS+'">Open view</button></div><button class="ho mt-3 text-xs text-gray-400 underline">Move host to another device</button><br><button data-x class="mt-3 text-sm text-gray-400 hover:text-white">Close</button></div>');
+  const d=modal('<div class="p-6 text-center"><div class="flex items-center justify-center gap-2 mb-1"><h3 class="text-xl text-white">Live View</h3><span class="text-[10px] font-bold text-blue-300 bg-blue-500/10 border border-blue-500/20 rounded-full px-2 py-1">VIEW ONLY</span></div><p class="text-xs text-gray-400 mb-4">Players can scan the QR code or open the link to watch courts, Up Next, the stack and leaderboard in real time. Player names and scores are visible to anyone with the link, and the session expires after 7 days.</p><div class="qrb bg-white p-3 rounded-xl mx-auto" style="width:200px;max-width:100%">'+qrSvg(url)+'</div><div class="mt-4 bg-dark-900 border border-dark-700 rounded-lg px-3 py-2 text-xs text-gray-300 break-all">'+esc(url)+'</div><div class="grid grid-cols-1 sm:grid-cols-3 gap-3 mt-4"><button class="cp '+bS+'">Copy link</button><button class="sh '+bP+'">Share</button><button class="op '+bS+'">Open view</button></div><button class="ho mt-3 text-xs text-gray-400 underline">Move host to another device</button><br><button class="diag mt-3 text-xs text-blue-300 underline">Connection diagnostics</button><br><button data-x class="mt-3 text-sm text-gray-400 hover:text-white">Close</button></div>');
   d.querySelector('.cp').onclick=async()=>{try{await navigator.clipboard.writeText(url);toast('Link copied','success')}catch(e){toast('Copy blocked by browser.','error')}};
   d.querySelector('.sh').onclick=async()=>{try{if(navigator.share)await navigator.share({title:'QueueZeroTwo Live View',text:'Watch our open play live',url});else{await navigator.clipboard.writeText(url);toast('Link copied','success')}}catch(e){}};
-  d.querySelector('.op').onclick=()=>window.open(url,'_blank','noopener,noreferrer');d.querySelector('.ho').onclick=()=>{d.__close();handoff()}
+  d.querySelector('.op').onclick=()=>window.open(url,'_blank','noopener,noreferrer');d.querySelector('.ho').onclick=()=>{d.__close();handoff()};d.querySelector('.diag').onclick=()=>{d.__close();openLiveDiagnostics()}
 }
 async function resImg(){
   try{await document.fonts.load('700 40px Oswald');await document.fonts.load('600 30px Inter')}catch(e){}
@@ -1032,8 +1127,8 @@ const randResultCode=()=>{const a=new Uint8Array(10);crypto.getRandomValues(a);r
 const randLiveCode=()=>{const a=new Uint8Array(10);crypto.getRandomValues(a);return Array.from(a,v=>LIVE_ALPH[v%LIVE_ALPH.length]).join('')};
 const randHostKey=()=>{const a=new Uint8Array(32);crypto.getRandomValues(a);return Array.from(a,v=>v.toString(16).padStart(2,'0')).join('')};
 function ensureLiveIdentity(){if(!S.sid||!S.sh){S.sid=randLiveCode();S.sh=randHostKey()}}
-async function publishSession(payload){if(!sb)return {error:new Error('Supabase unavailable')};ensureLiveIdentity();let q=await sb.rpc('publish_pickle_session',{p_code:S.sid,p_host_key:S.sh,p_payload:payload});if(q.error&&S.hoff&&Date.now()-S.hoff<864e5&&/Invalid host key/i.test(q.error.message||'')){S.hoff=0;S.ho=true;S.sid='';S.sh='';toast('Live View host moved to another device.','info');return {error:new Error('handed off')}}
-if(q.error&&/Invalid host key|expired session/i.test(q.error.message||'')){S.sid=randLiveCode();S.sh=randHostKey();q=await sb.rpc('publish_pickle_session',{p_code:S.sid,p_host_key:S.sh,p_payload:payload})}return q}
+async function publishSession(payload){if(!sb)return {error:new Error('Supabase unavailable')};ensureLiveIdentity();let q=await trackedLivePublish(S.sid,S.sh,payload,1);if(q.error&&S.hoff&&Date.now()-S.hoff<864e5&&/Invalid host key/i.test(q.error.message||'')){S.hoff=0;S.ho=true;S.sid='';S.sh='';toast('Live View host moved to another device.','info');return {error:new Error('handed off')}}
+if(q.error&&/Invalid host key|expired session/i.test(q.error.message||'')){S.sid=randLiveCode();S.sh=randHostKey();q=await trackedLivePublish(S.sid,S.sh,payload,2)}return q}
 let st;function pushS(){if(!sb||S.ended||S.ho)return;ensureLiveIdentity();clearTimeout(st);st=setTimeout(async()=>queuePublishPayload(await sdata(),S.sid,S.sh,'state'),400)}
 function normalizeLiveSessionPayload(data){
  if(!data||typeof data!=='object'||Array.isArray(data))return null;
@@ -1062,41 +1157,46 @@ function normalizeLiveSessionPayload(data){
  if(Number.isSafeInteger(data.seq))normalized.seq=data.seq;
  return normalized
 }
-function applyLiveSessionData(data,updatedAt){
+function applyLiveSessionData(data,updatedAt,source='snapshot'){
  if(!SV)return false;
- const normalized=normalizeLiveSessionPayload(data);
- if(!normalized){SV.warning='A Live View update was rejected. Showing the last valid update.';render();return false}
+ const m=viewerDiagnostics(),normalized=normalizeLiveSessionPayload(data);
+ if(!normalized){m.invalidPayloads++;m.lastRejectedAt=Date.now();SV.warning='A Live View update was rejected. Showing the last valid update.';render();return false}
  const nextSeq=Number.isSafeInteger(normalized.seq)?normalized.seq:null;
  const currentSeq=SV.d&&Number.isSafeInteger(SV.d.seq)?SV.d.seq:null;
  const nextTs=Date.parse(updatedAt||'');
  if(SV.d){
   if(currentSeq!==null){
-   if(nextSeq===null||nextSeq<=currentSeq)return false
-  }else if(nextSeq===null&&Number.isFinite(SV.ts)&&Number.isFinite(nextTs)&&nextTs<SV.ts)return false
+   if(nextSeq===null||nextSeq<=currentSeq){m.staleUpdates++;m.lastRejectedAt=Date.now();m.lastRejectedSeq=nextSeq;return false}
+  }else if(nextSeq===null&&Number.isFinite(SV.ts)&&Number.isFinite(nextTs)&&nextTs<SV.ts){
+   m.staleUpdates++;m.lastRejectedAt=Date.now();m.lastRejectedSeq=nextSeq;return false
+  }
  }
- SV.d=normalized;
- SV.warning='';
- if(Number.isFinite(nextTs))SV.ts=nextTs;
- SV.missing=false;
- render();
- return true
+ SV.d=normalized;SV.warning='';if(Number.isFinite(nextTs))SV.ts=nextTs;SV.missing=false;
+ m.acceptedUpdates++;m.lastUpdateAt=Date.now();m.lastAcceptedSeq=nextSeq;
+ if(source==='broadcast'){
+  m.broadcastsAccepted++;m.lastBroadcastAt=Date.now();
+  const age=Date.now()-nextTs;
+  if(Number.isFinite(age)&&age>=0&&age<=300000){m.arrivalAges.push(age);if(m.arrivalAges.length>30)m.arrivalAges.shift()}
+ }else m.snapshotsLoaded++;
+ render();return true
 }
 function applyLiveSessionBroadcast(q){
  const p=q&&q.payload||{};
  if(!SV||p.code!==SV.code||!p.data)return false;
+ const diag=viewerDiagnostics();diag.broadcastsReceived++;diag.lastBroadcastMessageAt=Date.now();
  if(window.__Q2_TEST_BROADCAST_DIAGNOSTICS__===true){
   const received=SV.receivedBroadcastSeqs||(SV.receivedBroadcastSeqs=[]);
   received.push(Number.isSafeInteger(p.data.seq)?p.data.seq:null);
   if(received.length>100)received.splice(0,received.length-100)
  }
- const accepted=applyLiveSessionData(p.data,p.updated_at);
+ const accepted=applyLiveSessionData(p.data,p.updated_at,'broadcast');
  if(accepted&&Number.isSafeInteger(SV.d.seq)){SV.lastBroadcastSeq=SV.d.seq;SV.lastBroadcastAt=Date.now()}
  return accepted
 }
 function renderSession(){
 const d=SV.d;
 const warning=SV.warning?'<div role="status" class="mb-3 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-200">'+esc(SV.warning)+'</div>':'';
-if(!d){$('viewer').innerHTML=warning+'<div class="bg-dark-800 border border-dark-700 rounded-2xl p-8 text-center"><div class="text-blue-300 text-sm font-semibold mb-2">LIVE VIEW</div><p class="text-gray-400 text-sm">'+(SV.missing?'This Live View link is no longer active. The host may have ended the session or started a new one. Ask them for the current QR code.':'Connecting to the shared session…')+'</p><p class="text-xs text-gray-400 mt-2">'+(SV.missing?'Ask the organizer for a new Live View link.':'Your screen will update automatically once connected.')+'</p></div>';return}
+if(!d){$('viewer').innerHTML=warning+'<div class="bg-dark-800 border border-dark-700 rounded-2xl p-8 text-center"><div class="text-blue-300 text-sm font-semibold mb-2">LIVE VIEW</div><p class="text-gray-400 text-sm">'+(SV.missing?'This Live View link is no longer active. The host may have ended the session or started a new one. Ask them for the current QR code.':'Connecting to the shared session…')+'</p><p class="text-xs text-gray-400 mt-2">'+(SV.missing?'Ask the organizer for a new Live View link.':'Your screen will update automatically once connected.')+'</p></div><div class="mt-4 text-right"><button id="vdiag" type="button" class="text-xs text-blue-300 underline">Connection diagnostics</button></div>';const diagButton=$('viewer').querySelector('#vdiag');if(diagButton)diagButton.onclick=openLiveDiagnostics;return}
 if(d.e)return renderResults(d);
 const courtsData=Array.isArray(d.courts)?d.courts.filter(c=>c&&typeof c==='object'&&!Array.isArray(c)):[];
 const queueData=Array.isArray(d.q)?d.q:[];
@@ -1117,7 +1217,8 @@ const nx=upData.length?'<div class="grid grid-cols-2 gap-3 text-sm"><div class="
 const lb=lbData.length?'<table class="w-full text-sm text-center"><thead class="text-xs text-gray-400"><tr><th class="text-left p-2">#</th><th class="text-left">Player</th><th>W-L</th><th>+/-</th></tr></thead><tbody class="divide-y divide-dark-700">'+lbData.map((x,i)=>{x=x&&typeof x==='object'?x:{};const w=num(x.w),l=num(x.l),diff=num(x.d);return '<tr><td class="text-left p-2 text-gray-400">'+(i+1)+'</td><td class="text-left">'+esc(player(x.n))+'</td><td>'+w+'-'+l+'</td><td class="'+(diff>0?'text-green-400':diff<0?'text-red-400':'')+'">'+(diff>0?'+':'')+diff+'</td></tr>'}).join('')+'</tbody></table>':'<p class="text-sm text-gray-400 p-4 text-center">No scored matches yet.</p>';
 const stack=queueData.length?queueData.map((p,i)=>'<div class="flex items-center gap-2 py-0.5"><span class="text-[11px] text-gray-400 w-7 flex-none">#'+(i+1)+'</span><span class="truncate">'+esc(player(p))+'</span><span class="text-[11px] text-gray-500 ml-auto flex-none">'+etaText(i+1,d.tm&&typeof d.tm==='object'?d.tm:null)+'</span></div>').join(''):'Empty';
 const note=d.tm&&typeof d.tm==='object'&&num(d.tm.a)>0?'Wait estimates are rough and based on recent finished games.':'Positions are live queue positions.';
-$('viewer').innerHTML=warning+'<div class="flex justify-between items-center mb-4"><div><h2 class="text-2xl text-white">Live Session</h2><p class="text-xs text-gray-400">'+note+'</p></div><span class="text-xs font-bold rounded-full px-2 py-1 '+(SV.status=='SUBSCRIBED'?'text-green-300 bg-green-500/10':'text-blue-300 bg-blue-500/10')+'">'+(SV.status=='SUBSCRIBED'?'LIVE · CONNECTED':'CONNECTING')+'</span></div><div class="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-6">'+courts+'</div><h3 class="text-xl text-white mb-2">Up Next</h3><div class="mb-6">'+nx+'</div><h3 class="text-xl text-white mb-2">The Stack ('+queueData.length+')</h3><div class="bg-dark-800 border border-dark-700 rounded-2xl p-4 mb-6 max-h-80 overflow-y-auto">'+stack+'</div><h3 class="text-xl text-white mb-2">Leaderboard</h3><div class="bg-dark-800 border border-dark-700 rounded-2xl overflow-x-auto">'+lb+'</div>'
+$('viewer').innerHTML=warning+'<div class="flex justify-between items-center mb-4"><div><h2 class="text-2xl text-white">Live Session</h2><p class="text-xs text-gray-400">'+note+'</p></div><span class="text-xs font-bold rounded-full px-2 py-1 '+(SV.status=='SUBSCRIBED'?'text-green-300 bg-green-500/10':'text-blue-300 bg-blue-500/10')+'">'+(SV.status=='SUBSCRIBED'?'LIVE · CONNECTED':'CONNECTING')+'</span></div><div class="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-6">'+courts+'</div><h3 class="text-xl text-white mb-2">Up Next</h3><div class="mb-6">'+nx+'</div><h3 class="text-xl text-white mb-2">The Stack ('+queueData.length+')</h3><div class="bg-dark-800 border border-dark-700 rounded-2xl p-4 mb-6 max-h-80 overflow-y-auto">'+stack+'</div><h3 class="text-xl text-white mb-2">Leaderboard</h3><div class="bg-dark-800 border border-dark-700 rounded-2xl overflow-x-auto">'+lb+'</div><div class="mt-4 text-right"><button id="vdiag" type="button" class="text-xs text-blue-300 underline">Connection diagnostics</button></div>';
+ const diagButton=$('viewer').querySelector('#vdiag');if(diagButton)diagButton.onclick=openLiveDiagnostics;
 }
 function renderArchivedResults(){
   if(!RA.d){$('viewer').innerHTML='<div class="bg-dark-800 border border-dark-700 rounded-2xl p-8 text-center"><div class="text-pickle-500 text-sm font-semibold mb-2">SESSION RESULTS</div><p class="text-gray-400 text-sm">'+(RA.missing?'This results link has expired or is no longer available.':'Loading saved results…')+'</p><a href="'+location.pathname+'" class="inline-block mt-4 text-sm text-pickle-500 underline">Open QueueZeroTwo</a></div>';return}
@@ -1233,15 +1334,21 @@ if(location.hash.startsWith('#m=')){const h=location.hash.slice(3);try{V=h.lengt
 if(false){const ap=q=>{V={...V,n:q.court,p:q.players,s:q.score,tg:q.target,fin:q.status!='live',ts:Date.parse(q.updated_at)};render()};
 sb.from('live_matches').select('*').eq('code',V.m).maybeSingle().then(q=>q.data&&ap(q.data));
 sb.channel('m'+V.m).on('postgres_changes',{event:'*',schema:'public',table:'live_matches',filter:'code=eq.'+V.m},q=>q.new&&ap(q.new)).subscribe()}if(location.hash.startsWith('#r=')){RA={code:location.hash.slice(3),d:null,ts:Date.now(),status:'CONNECTING'};$('app').classList.add('hidden');$('viewer').classList.remove('hidden','max-w-xl');$('nav').classList.add('hidden');$('viewer').classList.add('max-w-3xl');
-if(sb){const rv=resultsViewerClient(RA.code),ap=q=>{RA.d=q.data;RA.expires=q.expires_at;RA.ts=Date.parse(q.created_at);render()};rv.from('pickle_results').select('data,created_at,expires_at').eq('code',RA.code).maybeSingle().then(q=>{if(q.data)ap(q.data);else{RA.missing=true;render()}}).catch(()=>{RA.missing=true;render()})}else{RA.missing=true}}if(location.hash.startsWith('#s=')){SV={code:location.hash.slice(3),d:null,ts:Date.now(),status:'CONNECTING'};$('app').classList.add('hidden');$('viewer').classList.remove('hidden','max-w-xl');$('nav').classList.add('hidden');$('viewer').classList.add('max-w-3xl');
+if(sb){const rv=resultsViewerClient(RA.code),ap=q=>{RA.d=q.data;RA.expires=q.expires_at;RA.ts=Date.parse(q.created_at);render()};rv.from('pickle_results').select('data,created_at,expires_at').eq('code',RA.code).maybeSingle().then(q=>{if(q.data)ap(q.data);else{RA.missing=true;render()}}).catch(()=>{RA.missing=true;render()})}else{RA.missing=true}}if(location.hash.startsWith('#s=')){SV={code:location.hash.slice(3),d:null,ts:Date.now(),status:'CONNECTING',diag:null};$('app').classList.add('hidden');$('viewer').classList.remove('hidden','max-w-xl');$('nav').classList.add('hidden');$('viewer').classList.add('max-w-3xl');
 if(sb){
  const sv=viewerClient(SV.code),liveCode=SV.code;
  let viewerChannel=null,viewerGeneration=0,viewerRetryTimer=null,viewerRetryDelay=1000;
- const loadSnapshot=()=>{sv.from('live_sessions').select('code,data,updated_at,expires_at').eq('code',liveCode).maybeSingle().then(q=>{
-  if(!SV||SV.code!==liveCode)return;
-  if(q.data)applyLiveSessionData(q.data.data,q.data.updated_at);
-  else if(!SV.d){SV.missing=true;render()}
- }).catch(()=>{if(SV&&SV.code===liveCode&&!SV.d){SV.missing=true;render()}})};
+ const loadSnapshot=()=>{
+  const m=viewerDiagnostics();m.snapshotFetches++;m.lastSnapshotFetchAt=Date.now();
+  sv.from('live_sessions').select('code,data,updated_at,expires_at').eq('code',liveCode).maybeSingle().then(q=>{
+   if(!SV||SV.code!==liveCode)return;
+   if(q.error){m.snapshotErrors++;m.lastError=String(q.error.message||'Snapshot request failed').slice(0,160)}
+   if(q.data)applyLiveSessionData(q.data.data,q.data.updated_at,'snapshot');
+   else if(!SV.d){SV.missing=true;render()}
+  }).catch(error=>{
+   if(SV&&SV.code===liveCode){m.snapshotErrors++;m.lastError=String(error&&error.message||'Snapshot request failed').slice(0,160);if(!SV.d){SV.missing=true;render()}}
+  })
+ };
  const scheduleReconnect=()=>{
   if(!SV||SV.code!==liveCode||!navigator.onLine||viewerRetryTimer)return;
   const delay=viewerRetryDelay;
@@ -1252,6 +1359,7 @@ if(sb){
   if(!SV||SV.code!==liveCode)return;
   if(viewerRetryTimer){clearTimeout(viewerRetryTimer);viewerRetryTimer=null}
   const old=viewerChannel;viewerChannel=null;
+  const m=viewerDiagnostics();if(viewerGeneration>0)m.reconnectAttempts++;
   const generation=++viewerGeneration;
   SV.status='CONNECTING';render();
   const open=()=>{
@@ -1263,7 +1371,10 @@ if(sb){
    });
    ch.subscribe(status=>{
     if(generation!==viewerGeneration||!SV||SV.code!==liveCode)return;
-    SV.status=status||'CONNECTING';render();
+    SV.status=status||'CONNECTING';
+    if(['CLOSED','CHANNEL_ERROR','TIMED_OUT'].includes(status)){m.channelErrors++;m.lastError=String(status)}
+    if(status==='SUBSCRIBED'){m.lastConnectedAt=Date.now();m.lastError=''}
+    render();
     if(status==='SUBSCRIBED'){
      viewerRetryDelay=1000;
      loadSnapshot()
@@ -1277,7 +1388,7 @@ if(sb){
  connectViewer();
  document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible')connectViewer()});
  addEventListener('online',connectViewer);
- addEventListener('offline',()=>{if(SV&&SV.code===liveCode){SV.status='OFFLINE';render()}})
+ addEventListener('offline',()=>{if(SV&&SV.code===liveCode){SV.status='OFFLINE';viewerDiagnostics().lastOfflineAt=Date.now();render()}})
 }
 }
 
