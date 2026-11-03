@@ -1458,8 +1458,12 @@ async function main() {
     for (let i = 0; i < 11; i++) {
       await dp.locator('button[aria-label="Plus point, Team 1"]').first().click();
     }
+    const liveSeqBeforeFinish=await dp.evaluate(()=>Number(S.liveSeq)||0);
     await dp.getByRole('button', {name: 'FINISH & LOG'}).click();
     await dp.locator('#msg').getByText('Match logged.').waitFor({state:'visible', timeout:5000});
+    // Let the debounced Live View snapshot advance persisted seq before Undo.
+    // Sequence-only metadata must not make an otherwise untouched match "too late".
+    await dp.waitForFunction(seq=>(Number(S.liveSeq)||0)>seq,liveSeqBeforeFinish,{timeout:5000});
     await dp.locator('#msg').getByRole('button', {name:'Undo'}).click();
     await dp.waitForFunction(() => S.log.length === 0 && S.courts.some(c => c.isActive), null, {timeout:5000});
     await dp.locator('button[aria-label="Plus point, Team 1"]').first().waitFor({state:'visible', timeout:5000});

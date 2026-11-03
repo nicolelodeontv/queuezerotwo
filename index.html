@@ -1168,7 +1168,21 @@ save();render()}
 function undoOffer(snap){const pu=window.__pundo,after=JSON.stringify(S);if(snap===after)return;const t=document.createElement('div');
 t.className='mb border px-4 py-3 rounded-lg shadow-xl pointer-events-auto text-sm font-medium bg-dark-700 border-dark-700 flex items-center justify-between gap-3';
 t.innerHTML='<span>Match logged.</span><button class="rounded-lg bg-pickle-500 text-dark-900 font-bold px-3 py-1.5">Undo</button>';
-t.querySelector('button').onclick=()=>{t.remove();if(JSON.stringify(S)!==after)return toast('Too late to undo: things have changed.','error');S=JSON.parse(snap);if(window.pRestore)pRestore(pu);save();render();toast('Finish undone','success')};
+t.querySelector('button').onclick=()=>{
+  t.remove();
+  const latestSeq=Math.max(
+    Number.isSafeInteger(S.liveSeq)&&S.liveSeq>=0?S.liveSeq:0,
+    typeof readStoredLiveSequence==='function'?readStoredLiveSequence():0
+  );
+  const current=JSON.parse(JSON.stringify(S)),expected=JSON.parse(after);
+  // Live View sequence increments are internal metadata, not a user state change.
+  // They must not invalidate Undo while the visible match state remains untouched.
+  delete current.liveSeq;delete expected.liveSeq;
+  if(JSON.stringify(current)!==JSON.stringify(expected))return toast('Too late to undo: things have changed.','error');
+  S=JSON.parse(snap);
+  S.liveSeq=Math.max(Number.isSafeInteger(S.liveSeq)&&S.liveSeq>=0?S.liveSeq:0,latestSeq);
+  if(window.pRestore)pRestore(pu);save();render();toast('Finish undone','success')
+};
 $('msg').append(t);setTimeout(()=>t.remove(),8000)}
 let WL=null;
 async function wake(){try{if(!('wakeLock' in navigator)||document.visibilityState!=='visible')return;const on=S.courts.some(c=>c.isActive);
