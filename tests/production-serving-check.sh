@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-branch="${GITHUB_BASE_REF:-${GITHUB_REF_NAME:-main}}"
+branch="${GITHUB_BASE_REF:-main}"
 git fetch --no-tags --depth=1 origin "$branch"
 expected_pair="$(git show FETCH_HEAD:index.html | grep -o 'const pair=[^;]*;' | head -n 1 || true)"
 expected_cache="$(git show FETCH_HEAD:sw.js | grep -o 'queuezerotwo-v[0-9]*' | head -n 1 || true)"
