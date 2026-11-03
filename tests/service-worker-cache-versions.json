@@ -1,0 +1,176 @@
+{
+  "format": 1,
+  "releaseOrder": [
+    61,
+    62,
+    63
+  ],
+  "currentBranch": "fix/live-view-broadcast-readiness",
+  "currentCache": "queuezerotwo-v31",
+  "allocations": [
+    {
+      "cache": "queuezerotwo-v1",
+      "status": "released",
+      "commit": "8045354c4069d67eb668bec2c578d89a71c8fe3e"
+    },
+    {
+      "cache": "queuezerotwo-v2",
+      "status": "released",
+      "commit": "551b02289327be63150a228a8a1395d73c57760e"
+    },
+    {
+      "cache": "queuezerotwo-v3",
+      "status": "released",
+      "commit": "c383a16233f4d82745b19b06507c606edaf09af8"
+    },
+    {
+      "cache": "queuezerotwo-v4",
+      "status": "released",
+      "commit": "dff8f7277d0325350b010a8cdab19d1e70844c7e"
+    },
+    {
+      "cache": "queuezerotwo-v5",
+      "status": "released",
+      "commit": "8856b7531a282f0db09441ff38abd07b3d4ff0f1"
+    },
+    {
+      "cache": "queuezerotwo-v6",
+      "status": "released",
+      "commit": "918a4e94bbc45563008732359c1f23fbbbfe937d"
+    },
+    {
+      "cache": "queuezerotwo-v7",
+      "status": "released",
+      "commit": "ce479a1a9e995a70988691f479dcbbfc92d29c6d"
+    },
+    {
+      "cache": "queuezerotwo-v8",
+      "status": "released",
+      "commit": "6576f8ee84df7109eadf801ee689c4d83db4db99"
+    },
+    {
+      "cache": "queuezerotwo-v9",
+      "status": "released",
+      "commit": "26d735ba46cf1b3dc20083e4223ff3434105a83b"
+    },
+    {
+      "cache": "queuezerotwo-v10",
+      "status": "released",
+      "commit": "9c5751213ffb0ad83b213d443e735a632489011c"
+    },
+    {
+      "cache": "queuezerotwo-v11",
+      "status": "released",
+      "commit": "2beb8d0fab8e0d3833270723c40cdffb114c25c2"
+    },
+    {
+      "cache": "queuezerotwo-v12",
+      "status": "released",
+      "commit": "cfb3548224cbcdce6048230236411248c930a543"
+    },
+    {
+      "cache": "queuezerotwo-v13",
+      "status": "released",
+      "commit": "fcbe9772c1714c89a34f5f03939c97ae63ab0af5"
+    },
+    {
+      "cache": "queuezerotwo-v14",
+      "status": "released",
+      "commit": "fc07a49868d6890db749ed68a0bd1413346da53d"
+    },
+    {
+      "cache": "queuezerotwo-v15",
+      "status": "released",
+      "commit": "4a2e60514f51aeb3340d815ccae8524a7e192533"
+    },
+    {
+      "cache": "queuezerotwo-v16",
+      "status": "released",
+      "commit": "f616927c0669dcff548088405bd7c7a1ccac3f83"
+    },
+    {
+      "cache": "queuezerotwo-v17",
+      "status": "released",
+      "commit": "7a98b81a4a0fc77086f4914706b87ed5fea88737"
+    },
+    {
+      "cache": "queuezerotwo-v18",
+      "status": "released",
+      "commit": "c98631c338f0ea44c8fafe8ac9dec520a3525449"
+    },
+    {
+      "cache": "queuezerotwo-v19",
+      "status": "released",
+      "commit": "73e6b0eebea347f762254f7ebd38fd481bbe9093"
+    },
+    {
+      "cache": "queuezerotwo-v20",
+      "status": "released",
+      "commit": "0a7c42c93f581fd7472bca7c323e44754852e1db"
+    },
+    {
+      "cache": "queuezerotwo-v21",
+      "status": "released",
+      "commit": "5b1382dc7485b1b47407dc2c9e5f00ddfd2c8c5c"
+    },
+    {
+      "cache": "queuezerotwo-v22",
+      "status": "released",
+      "commit": "3d116f29e2177c5ce3aca5b7450c04c5a4668e41"
+    },
+    {
+      "cache": "queuezerotwo-v23",
+      "status": "released",
+      "commit": "9f2ff1e649fa32aa5d3d26a85fcc9560b4b950bc"
+    },
+    {
+      "cache": "queuezerotwo-v24",
+      "status": "released",
+      "commit": "b13a6d78e01ffd848ddc4a5f3dc158274d840e6b"
+    },
+    {
+      "cache": "queuezerotwo-v25",
+      "status": "released",
+      "commit": "5481bba140ac28cce311dc3f803edef389df57fb"
+    },
+    {
+      "cache": "queuezerotwo-v26",
+      "status": "released",
+      "commit": "53bbff25ea8b4d36c9394dc8ad5182b6017ee736"
+    },
+    {
+      "cache": "queuezerotwo-v27",
+      "status": "released",
+      "commit": "012e44f15624c1c393ca626c2409d85b84a1aea3"
+    },
+    {
+      "cache": "queuezerotwo-v28",
+      "status": "released",
+      "commit": "b8d9befdd4b2447316fcb322eb32b3dd18a507c4"
+    },
+    {
+      "cache": "queuezerotwo-v29",
+      "status": "released",
+      "commit": "007ffde7897f71b059faafe8719cde623d9454ca"
+    },
+    {
+      "cache": "queuezerotwo-v30",
+      "status": "released",
+      "pr": 61,
+      "branch": "feature/results-dialog-export",
+      "merge_commit_sha": "afb83d825785137063cf5f55331035d25965d81d"
+    },
+    {
+      "cache": "queuezerotwo-v31",
+      "status": "assigned",
+      "pr": 62,
+      "branch": "fix/live-view-broadcast-readiness"
+    },
+    {
+      "cache": "queuezerotwo-v32",
+      "status": "reserved",
+      "pr": 63,
+      "branch": "feature/early-finish-winner-prompt"
+    }
+  ]
+}
