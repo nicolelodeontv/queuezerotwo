@@ -3,10 +3,11 @@
   "releaseOrder": [
     61,
     62,
-    63
+    63,
+    65
   ],
-  "currentBranch": "feature/early-finish-winner-prompt",
-  "currentCache": "queuezerotwo-v32",
+  "currentBranch": "feature/live-view-reliability-monitor",
+  "currentCache": "queuezerotwo-v33",
   "allocations": [
     {
       "cache": "queuezerotwo-v1",
@@ -169,9 +170,16 @@
     },
     {
       "cache": "queuezerotwo-v32",
-      "status": "reserved",
+      "status": "released",
       "pr": 63,
-      "branch": "feature/early-finish-winner-prompt"
+      "branch": "feature/early-finish-winner-prompt",
+      "merge_commit_sha": "c10bfc147c23e0557dc8a190821294a1d75e48f2"
+    },
+    {
+      "cache": "queuezerotwo-v33",
+      "status": "reserved",
+      "pr": 65,
+      "branch": "feature/live-view-reliability-monitor"
     }
   ]
 }

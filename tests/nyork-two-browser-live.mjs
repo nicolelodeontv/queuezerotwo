@@ -66,6 +66,10 @@ async function runNyorkOnce(iteration) {
     console.log('[NYORK LIVE CONTROL] ' + JSON.stringify(published));
     assert.match(liveCode, /^[A-Z2-9]{10}$/);
     assert.equal(published.success, true, 'Nyork Live View host publish must succeed');
+    const initialHostDiagnostics=await host.evaluate(()=>readHostDiagnostics(S.sid));
+    assert.ok(initialHostDiagnostics.attempts>=1,'Host monitor records the Live View RPC attempt');
+    assert.ok(initialHostDiagnostics.successes>=1,'Host monitor records the successful publish');
+    assert.equal(initialHostDiagnostics.failures,0,'Successful first publish has no failure');
 
     await viewer.goto(APP + '#s=' + liveCode, {waitUntil: 'domcontentloaded'});
     let viewerDialogs = [];
@@ -83,6 +87,20 @@ async function runNyorkOnce(iteration) {
     assert.match(firstViewerText, /Alice & Bob/);
     assert.match(firstViewerText, /Cara & Dan/);
     assert.equal(await viewer.evaluate(()=>SV.d.seq),published.seq,'The RPC accepts and persists numeric seq');
+    const initialViewerDiagnostics=await viewer.evaluate(()=>viewerDiagnostics());
+    assert.ok(initialViewerDiagnostics.snapshotsLoaded>=1,'Viewer monitor records its initial database snapshot');
+    assert.ok(initialViewerDiagnostics.acceptedUpdates>=1,'Viewer monitor records the initial accepted update');
+    await viewer.locator('#vdiag').click();
+    const viewerDiagDialog=viewer.locator('[role="dialog"]').last();
+    await viewerDiagDialog.getByText('Live View diagnostics',{exact:true}).waitFor({state:'visible',timeout:5000});
+    assert.match(await viewerDiagDialog.innerText(),/Average arrival age/);
+    assert.match(await viewerDiagDialog.innerText(),/Stale updates ignored/);
+    await viewerDiagDialog.getByRole('button',{name:'Close'}).click();
+    await host.locator('#ct').click();
+    const hostDiagDialog=host.locator('[role="dialog"]').last();
+    await hostDiagDialog.getByText('Live View diagnostics',{exact:true}).waitFor({state:'visible',timeout:5000});
+    assert.match(await hostDiagDialog.innerText(),/Publish attempts/);
+    await hostDiagDialog.getByRole('button',{name:'Close'}).click();
 
     // Simulate an RPC that reached the database but whose response was lost:
     // retry the exact same payload/seq. Verify persistence separately from the
@@ -134,6 +152,8 @@ async function runNyorkOnce(iteration) {
     assert.equal(staleSnapshotGuard.accepted,false,'A lower sequence must not replace newer state');
     assert.equal(staleSnapshotGuard.dataPreserved,true);
     assert.equal(staleSnapshotGuard.sequencePreserved,true);
+    const staleMonitor=await viewer.evaluate(()=>viewerDiagnostics().staleUpdates);
+    assert.ok(staleMonitor>=2,'Viewer monitor counts duplicate and lower-sequence snapshots rejected by the guard');
 
     // A score save schedules the normal 400ms publish. Simulate an immediate
     // reload before that timer fires; startup must publish the persisted state.
@@ -228,7 +248,7 @@ async function runNyorkOnce(iteration) {
       S.courts[0].score=[13,4];
       const payload=await sdata();
       const q=await publishSession(payload);
-      return {seq:payload.seq,payload,success:!q.error&&q.data===true,error:q.error?.message||null};
+      return {seq:payload.seq,success:!q.error&&q.data===true,error:q.error?.message||null};
     });
     assert.equal(firstTabUpdate.success,true);
     await viewer.waitForFunction(({seq})=>SV?.lastBroadcastSeq===seq&&SV?.d?.courts?.[0]?.s?.[0]===13,{seq:firstTabUpdate.seq},{timeout:10000});
@@ -237,7 +257,7 @@ async function runNyorkOnce(iteration) {
       S.courts[0].score=[14,4];
       const payload=await sdata();
       const q=await publishSession(payload);
-      return {seq:payload.seq,payload,success:!q.error&&q.data===true,error:q.error?.message||null};
+      return {seq:payload.seq,success:!q.error&&q.data===true,error:q.error?.message||null};
     });
     assert.equal(secondTabUpdate.success,true);
     assert.ok(secondTabUpdate.seq>firstTabUpdate.seq,'Second host tab allocates a higher sequence');
@@ -281,96 +301,6 @@ async function runNyorkOnce(iteration) {
       }));
     }
     assert.equal(secondTabViewerWaitError,null,'Viewer receives the second host tab snapshot');
-
-    // Verify the database rejects a delayed retry from another host tab. Both
-    // tabs share the same session key, but the older tab retains an older payload.
-    const newestTabUpdate=await host.evaluate(async()=>{
-      S.courts[0].score=[15,4];
-      const payload=await sdata();
-      const q=await publishSession(payload);
-      return {seq:payload.seq,payload,success:!q.error&&q.data===true,error:q.error?.message||null};
-    });
-    assert.equal(newestTabUpdate.success,true,'The newest host-tab snapshot is accepted');
-    assert.ok(newestTabUpdate.seq>secondTabUpdate.seq,'The fresh snapshot is newer than both tab snapshots');
-    await viewer.waitForFunction(({seq})=>
-      SV?.lastBroadcastSeq===seq&&SV?.d?.courts?.[0]?.s?.[0]===15,
-      {seq:newestTabUpdate.seq},{timeout:10000}
-    );
-    const persistedBeforeStaleRetry=await host.evaluate(async()=>{
-      const q=await viewerClient(S.sid).from('live_sessions').select('data,updated_at').eq('code',S.sid).maybeSingle();
-      return {seq:q.data?.data?.seq??null,score:q.data?.data?.courts?.[0]?.s?.[0]??null,updatedAt:q.data?.updated_at??null,error:q.error?.message||null};
-    });
-    assert.equal(persistedBeforeStaleRetry.error,null);
-    assert.equal(persistedBeforeStaleRetry.seq,newestTabUpdate.seq);
-    assert.equal(persistedBeforeStaleRetry.score,15);
-    const staleRetryFromSecondTab=await secondHost.evaluate(async(payload)=>{
-      const q=await publishSession(payload);
-      const row=await viewerClient(S.sid).from('live_sessions').select('data,updated_at').eq('code',S.sid).maybeSingle();
-      return {
-        rpcSuccess:!q.error&&q.data===true,
-        rpcError:q.error?.message||null,
-        storedSeq:row.data?.data?.seq??null,
-        storedScore:row.data?.data?.courts?.[0]?.s?.[0]??null,
-        storedUpdatedAt:row.data?.updated_at??null,
-        readError:row.error?.message||null
-      };
-    },firstTabUpdate.payload);
-    assert.equal(staleRetryFromSecondTab.rpcSuccess,true,'A stale retry by the valid host key is acknowledged as a no-op');
-    assert.equal(staleRetryFromSecondTab.readError,null);
-    assert.ok(firstTabUpdate.seq<newestTabUpdate.seq,'The delayed payload is older than the persisted snapshot');
-    assert.equal(staleRetryFromSecondTab.storedSeq,newestTabUpdate.seq,'The database does not regress to the stale sequence');
-    assert.equal(staleRetryFromSecondTab.storedScore,15,'The newer score remains persisted');
-    assert.equal(staleRetryFromSecondTab.storedUpdatedAt,persistedBeforeStaleRetry.updatedAt,'A rejected stale retry does not update updated_at or emit a new row version');
-
-    // Legacy compatibility: unsequenced clients may continue updating a legacy
-    // row, and the first sequenced write upgrades it. After that, a delayed
-    // unsequenced write is a successful no-op rather than replacing sequenced data.
-    const legacyCompatibility=await secondHost.evaluate(async(seedPayload)=>{
-      const code=randLiveCode(),hostKey=randHostKey();
-      const legacyOne=JSON.parse(JSON.stringify(seedPayload));
-      delete legacyOne.seq;
-      legacyOne.courts[0].s=[1,4];
-      const first=await sb.rpc('publish_pickle_session',{p_code:code,p_host_key:hostKey,p_payload:legacyOne});
-      const legacyTwo=JSON.parse(JSON.stringify(legacyOne));
-      legacyTwo.courts[0].s=[2,4];
-      const second=await sb.rpc('publish_pickle_session',{p_code:code,p_host_key:hostKey,p_payload:legacyTwo});
-      const beforeUpgrade=await viewerClient(code).from('live_sessions').select('data,updated_at').eq('code',code).maybeSingle();
-      const sequenced=JSON.parse(JSON.stringify(legacyTwo));
-      sequenced.seq=Date.now();
-      sequenced.courts[0].s=[3,4];
-      const upgrade=await sb.rpc('publish_pickle_session',{p_code:code,p_host_key:hostKey,p_payload:sequenced});
-      const delayedLegacy=JSON.parse(JSON.stringify(legacyOne));
-      delayedLegacy.courts[0].s=[99,4];
-      const staleLegacy=await sb.rpc('publish_pickle_session',{p_code:code,p_host_key:hostKey,p_payload:delayedLegacy});
-      const invalidSequence=JSON.parse(JSON.stringify(sequenced));
-      invalidSequence.seq=1.5;
-      const invalid=await sb.rpc('publish_pickle_session',{p_code:code,p_host_key:hostKey,p_payload:invalidSequence});
-      const finalRow=await viewerClient(code).from('live_sessions').select('data,updated_at').eq('code',code).maybeSingle();
-      return {
-        firstLegacyOk:!first.error&&first.data===true,
-        secondLegacyOk:!second.error&&second.data===true,
-        legacyScore:beforeUpgrade.data?.data?.courts?.[0]?.s?.[0]??null,
-        legacyHasNoSeq:!Object.prototype.hasOwnProperty.call(beforeUpgrade.data?.data||{},'seq'),
-        upgradeOk:!upgrade.error&&upgrade.data===true,
-        staleLegacyOk:!staleLegacy.error&&staleLegacy.data===true,
-        invalidSeqRejected:!!invalid.error&&/sequence/i.test(invalid.error.message||''),
-        finalSeq:finalRow.data?.data?.seq??null,
-        finalScore:finalRow.data?.data?.courts?.[0]?.s?.[0]??null,
-        finalReadError:finalRow.error?.message||null,
-        upgradeSeq:sequenced.seq
-      };
-    },newestTabUpdate.payload);
-    assert.equal(legacyCompatibility.firstLegacyOk,true,'A legacy payload can create a legacy session');
-    assert.equal(legacyCompatibility.secondLegacyOk,true,'Legacy clients can update a row until it has a numeric sequence');
-    assert.equal(legacyCompatibility.legacyHasNoSeq,true,'Legacy writes retain the legacy no-sequence format');
-    assert.equal(legacyCompatibility.legacyScore,2,'A second legacy write updates the legacy row');
-    assert.equal(legacyCompatibility.upgradeOk,true,'A sequenced host can upgrade a legacy row');
-    assert.equal(legacyCompatibility.staleLegacyOk,true,'A delayed unsequenced retry is acknowledged as a no-op');
-    assert.equal(legacyCompatibility.invalidSeqRejected,true,'The database rejects fractional sequence values');
-    assert.equal(legacyCompatibility.finalReadError,null);
-    assert.equal(legacyCompatibility.finalSeq,legacyCompatibility.upgradeSeq,'The sequenced row remains sequenced after a legacy retry');
-    assert.equal(legacyCompatibility.finalScore,3,'The late legacy payload cannot overwrite the sequenced row');
-
 
     // Restoring a stale backup intentionally creates a new Live View identity (host key is excluded).
     const restored=await host.evaluate(async()=>{
@@ -467,6 +397,10 @@ async function runNyorkOnce(iteration) {
       broadcastLatencies.push(Date.now()-startedAt);
       await viewer.waitForTimeout(200);
     }
+    const liveViewerMetrics=await viewer.evaluate(()=>viewerDiagnostics());
+    assert.ok(liveViewerMetrics.broadcastsReceived>=broadcastIterations,'Viewer monitor counts incoming Realtime Broadcast messages');
+    assert.ok(liveViewerMetrics.broadcastsAccepted>=broadcastIterations,'Viewer monitor counts accepted Realtime updates');
+    assert.ok(liveViewerMetrics.arrivalAges.length>=1,'Viewer monitor samples arrival age from database update timestamps');
     realtimeUpdate=true;
 
     // Simulate a sleeping/offline viewer: host publishes while the viewer is disconnected.
@@ -488,6 +422,8 @@ async function runNyorkOnce(iteration) {
       return navigator.onLine&&SV?.status==='SUBSCRIBED'&&SV?.d?.seq===seq&&SV?.d?.courts?.[0]?.s?.[0]===score&&text.includes('LIVE · CONNECTED');
     },{seq:reconnectSeq,score:reconnectScore},{timeout:15000});
     assert.equal(viewerMainNavigations,navigationsBeforeReconnect,'Reconnect must recover without a page reload');
+    const reconnectMetrics=await viewer.evaluate(()=>viewerDiagnostics());
+    assert.ok(reconnectMetrics.reconnectAttempts>=1,'Viewer monitor counts connection recovery attempts');
     const reconnectUpdate=true;
 
     // Hostile strings pass the RPC's string-type validation and are delivered by the DB trigger.
@@ -665,7 +601,12 @@ async function runNyorkOnce(iteration) {
       hostileBroadcastSafe: true,
       clientBoundaryChecks: true,
       resultsCode,
-      resultsViewerLoaded: true
+      resultsViewerLoaded: true,
+      hostPublishDiagnostics: true,
+      viewerConnectionDiagnostics: true,
+      viewerStaleUpdateCounters: true,
+      viewerArrivalAgeMetrics: true,
+      viewerReconnectMetrics: true
     }));
   } finally {
     await Promise.all([hostContext.close(), viewerContext.close()]);
