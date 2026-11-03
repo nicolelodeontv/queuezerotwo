@@ -313,6 +313,37 @@ begin
 end
 $client_payload_contract$;
 
+-- A completed early match publishes the manually selected winner through sdata().lb.
+-- Both winner orientations must satisfy the real publish_pickle_session validator.
+select public.publish_pickle_session(
+  'R2WIN01',
+  repeat('c',64),
+  '{"t":11,"wb":2,"courts":[{"n":"Court 1","a":false,"p":[],"s":[0,0]}],"nx":[],"up":[],"tm":null,"q":["Gamma","Delta","Alpha","Beta"],"lb":[{"n":"Alpha","w":1,"l":0,"d":1},{"n":"Beta","w":1,"l":0,"d":1},{"n":"Gamma","w":0,"l":1,"d":-1},{"n":"Delta","w":0,"l":1,"d":-1}]}'::jsonb
+);
+select public.publish_pickle_session(
+  'R2WIN02',
+  repeat('d',64),
+  '{"t":11,"wb":2,"courts":[{"n":"Court 1","a":false,"p":[],"s":[0,0]}],"nx":[],"up":[],"tm":null,"q":["Alpha","Beta","Gamma","Delta"],"lb":[{"n":"Gamma","w":1,"l":0,"d":1},{"n":"Delta","w":1,"l":0,"d":1},{"n":"Alpha","w":0,"l":1,"d":-1},{"n":"Beta","w":0,"l":1,"d":-1}]}'::jsonb
+);
+do $winner_live_payload$
+begin
+  if not exists (
+    select 1 from public.live_sessions
+     where code='R2WIN01'
+       and data->'lb' @> '[{"n":"Alpha","w":1,"l":0,"d":1},{"n":"Beta","w":1,"l":0,"d":1}]'::jsonb
+  ) then
+    raise exception 'valid Team 1 early-finish Live View leaderboard did not pass the RPC guard';
+  end if;
+  if not exists (
+    select 1 from public.live_sessions
+     where code='R2WIN02'
+       and data->'lb' @> '[{"n":"Gamma","w":1,"l":0,"d":1},{"n":"Delta","w":1,"l":0,"d":1}]'::jsonb
+  ) then
+    raise exception 'valid Team 2 early-finish Live View leaderboard did not pass the RPC guard';
+  end if;
+end
+$winner_live_payload$;
+
 select public.publish_pickle_results_v2(
   'R2DB001',
   repeat('a',64),

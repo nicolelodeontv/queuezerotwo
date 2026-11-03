@@ -5,8 +5,8 @@
     62,
     63
   ],
-  "currentBranch": "fix/live-view-broadcast-readiness",
-  "currentCache": "queuezerotwo-v31",
+  "currentBranch": "feature/early-finish-winner-prompt",
+  "currentCache": "queuezerotwo-v32",
   "allocations": [
     {
       "cache": "queuezerotwo-v1",
@@ -162,9 +162,10 @@
     },
     {
       "cache": "queuezerotwo-v31",
-      "status": "assigned",
+      "status": "released",
       "pr": 62,
-      "branch": "fix/live-view-broadcast-readiness"
+      "branch": "fix/live-view-broadcast-readiness",
+      "merge_commit_sha": "de036ea293925e06e7ee57036891adfdd70fe2a0"
     },
     {
       "cache": "queuezerotwo-v32",

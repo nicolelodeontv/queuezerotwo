@@ -70,6 +70,9 @@ jobs:
           Path("/tmp/queuezerotwo-inline.js").write_text(h[start+8:end], encoding="utf-8")
           PY
           node --check /tmp/queuezerotwo-inline.js
+      - name: Verify live Production alias matches current main
+        shell: bash
+        run: bash tests/production-serving-check.sh
       - name: Verify unique service-worker cache allocations
         run: node tests/service-worker-cache-versions.mjs
       - name: Check Preview configuration build script
