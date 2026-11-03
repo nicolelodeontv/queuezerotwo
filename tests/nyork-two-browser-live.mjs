@@ -342,6 +342,9 @@ async function runNyorkOnce(iteration) {
       const delayedLegacy=JSON.parse(JSON.stringify(legacyOne));
       delayedLegacy.courts[0].s=[99,4];
       const staleLegacy=await sb.rpc('publish_pickle_session',{p_code:code,p_host_key:hostKey,p_payload:delayedLegacy});
+      const invalidSequence=JSON.parse(JSON.stringify(sequenced));
+      invalidSequence.seq=1.5;
+      const invalid=await sb.rpc('publish_pickle_session',{p_code:code,p_host_key:hostKey,p_payload:invalidSequence});
       const finalRow=await viewerClient(code).from('live_sessions').select('data,updated_at').eq('code',code).maybeSingle();
       return {
         firstLegacyOk:!first.error&&first.data===true,
@@ -350,6 +353,7 @@ async function runNyorkOnce(iteration) {
         legacyHasNoSeq:!Object.prototype.hasOwnProperty.call(beforeUpgrade.data?.data||{},'seq'),
         upgradeOk:!upgrade.error&&upgrade.data===true,
         staleLegacyOk:!staleLegacy.error&&staleLegacy.data===true,
+        invalidSeqRejected:!!invalid.error&&/sequence/i.test(invalid.error.message||''),
         finalSeq:finalRow.data?.data?.seq??null,
         finalScore:finalRow.data?.data?.courts?.[0]?.s?.[0]??null,
         finalReadError:finalRow.error?.message||null,
@@ -362,6 +366,7 @@ async function runNyorkOnce(iteration) {
     assert.equal(legacyCompatibility.legacyScore,2,'A second legacy write updates the legacy row');
     assert.equal(legacyCompatibility.upgradeOk,true,'A sequenced host can upgrade a legacy row');
     assert.equal(legacyCompatibility.staleLegacyOk,true,'A delayed unsequenced retry is acknowledged as a no-op');
+    assert.equal(legacyCompatibility.invalidSeqRejected,true,'The database rejects fractional sequence values');
     assert.equal(legacyCompatibility.finalReadError,null);
     assert.equal(legacyCompatibility.finalSeq,legacyCompatibility.upgradeSeq,'The sequenced row remains sequenced after a legacy retry');
     assert.equal(legacyCompatibility.finalScore,3,'The late legacy payload cannot overwrite the sequenced row');
