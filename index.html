@@ -256,7 +256,7 @@ html[data-theme=light]{color-scheme:light}
 <div id="rcol" class="lg:col-span-8 space-y-10">
 <section id="sun" class="bg-dark-800 rounded-2xl border border-dark-700 p-5">
 <div class="flex flex-wrap justify-between items-center gap-3 mb-4"><div><h2 class="text-2xl text-white">Up Next</h2><p class="text-gray-400 text-sm">Teams for the next four players in the stack.</p></div>
-<div class="flex items-center gap-2 text-xs"><button id="mdb" onclick="smd('bal')">Balanced</button><button id="mds" onclick="smd('soc')">Social mix</button><button onclick="shuf()" class="px-3 py-1.5 rounded-lg border border-dark-700 text-gray-300 hover:border-pickle-500"><i class="fa-solid fa-shuffle"></i> Reshuffle</button><button onclick="announceNext()" title="Say the next teams out loud" class="px-3 py-1.5 rounded-lg border border-dark-700 text-gray-300 hover:border-pickle-500"><i class="fa-solid fa-bullhorn"></i> Announce</button></div></div>
+<div class="flex items-center gap-2 text-xs flex-wrap"><button id="mdb" onclick="smd('bal')">Balanced</button><button id="mds" onclick="smd('soc')">Social mix</button><button onclick="rotationFairness()" title="Review player games, sit-outs and waiting time" class="px-3 py-1.5 rounded-lg border border-dark-700 text-gray-300 hover:border-pickle-500"><i class="fa-solid fa-scale-balanced"></i> Fairness</button><button onclick="shuf()" class="px-3 py-1.5 rounded-lg border border-dark-700 text-gray-300 hover:border-pickle-500"><i class="fa-solid fa-shuffle"></i> Reshuffle</button><button onclick="announceNext()" title="Say the next teams out loud" class="px-3 py-1.5 rounded-lg border border-dark-700 text-gray-300 hover:border-pickle-500"><i class="fa-solid fa-bullhorn"></i> Announce</button></div></div>
 <p id="mdi" class="text-xs text-gray-400 mb-3"></p>
 <div class="flex flex-wrap items-center gap-2 text-xs mb-3"><button id="wsb" onclick="tws()"></button><button id="eqb" onclick="teq()"></button><label id="wlw" class="text-gray-400 flex items-center gap-1">Max wins in a row <select id="wls" onchange="swl(+this.value)" class="bg-dark-900 border border-dark-700 rounded px-2 py-1 text-white"><option value="0">No limit</option><option value="2">2</option><option value="3">3</option><option value="4">4</option></select></label></div>
 <p id="wsi" class="text-xs text-gray-400 mb-4 hidden"></p>
@@ -529,7 +529,7 @@ async function flushPublishQueue(){
   }
 }
 function push(){}
-const mk=()=>({queue:[],waiting:[],rest:{},log:[],target:11,lv:{},md:'bal',sd:0,gp:{},wt:{},liveSeq:0,ws:false,wl:2,eq:false,tts:false,hap:true,rr:false,lr:false,lpf:false,rpf:false,courts:[1,2,3,4].map(id=>({id,name:'Court '+id,isActive:false,players:[],score:[0,0],mid:'',t:0}))});
+const mk=()=>({queue:[],waiting:[],rest:{},log:[],fair:{},target:11,lv:{},md:'bal',sd:0,gp:{},wt:{},liveSeq:0,ws:false,wl:2,eq:false,tts:false,hap:true,rr:false,lr:false,lpf:false,rpf:false,courts:[1,2,3,4].map(id=>({id,name:'Court '+id,isActive:false,players:[],score:[0,0],mid:'',t:0}))});
 let S=mk(),V=null,SV=null,RA=null;
 const esc=s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const num=v=>{if(typeof v!=='number'&&typeof v!=='string')return 0;const n=Number(v);return Number.isFinite(n)?n:0};
@@ -540,6 +540,7 @@ const nm=(p,i)=>esc(tx(p,i));
 const hm=t=>new Date(t).toLocaleTimeString([],{hour:'numeric',minute:'2-digit'});
 const mins=t=>Math.max(0,Math.round((Date.now()-t)/60000));
 const wk=n=>String(n).trim().toLowerCase();
+const safeFairnessKey=n=>{const k=wk(n);return k&&k!=='__proto__'&&k!=='constructor'&&k!=='prototype'?k:''};
 function normalizeWaitTimes(queue,raw){
   const wt=raw&&typeof raw==='object'&&!Array.isArray(raw)?{...raw}:{};
   const now=Date.now(),keys=new Set(queue.map(wk));
@@ -549,10 +550,23 @@ function normalizeWaitTimes(queue,raw){
 }
 function markWaiting(players,at=Date.now()){S.wt=S.wt||{};players.forEach(p=>{S.wt[wk(p)]=at})}
 function clearWaiting(players){if(!S.wt)return;players.forEach(p=>delete S.wt[wk(p)])}
+function normalizeFairnessRecords(raw){
+ const out={};
+ if(!raw||typeof raw!=='object'||Array.isArray(raw))return out;
+ const count=v=>Math.min(1000000,Math.max(0,Math.floor(Number(v)||0)));
+ const duration=v=>Math.min(315360000000,Math.max(0,Number(v)||0));
+ Object.keys(raw).slice(0,5000).forEach(name=>{
+  const k=safeFairnessKey(name),v=raw[name];
+  if(!k||!v||typeof v!=='object'||Array.isArray(v))return;
+  const streak=count(v.consecutiveSitouts);
+  out[k]={sitouts:count(v.sitouts),consecutiveSitouts:streak,maxConsecutiveSitouts:Math.max(streak,count(v.maxConsecutiveSitouts)),totalWaitMs:duration(v.totalWaitMs),waitSamples:count(v.waitSamples),lastWaitMs:duration(v.lastWaitMs),lastSelectedAt:Math.max(0,Number(v.lastSelectedAt)||0)};
+ });
+ return out
+}
 
 function readStoredLiveSequence(){try{const saved=JSON.parse(localStorage.getItem(K)||'null');return saved&&Number.isSafeInteger(saved.liveSeq)&&saved.liveSeq>=0?saved.liveSeq:0}catch(e){return 0}}
 function resumeLiveSequence(){S.liveSeq=Math.max(Number.isSafeInteger(S.liveSeq)&&S.liveSeq>=0?S.liveSeq:0,readStoredLiveSequence(),Date.now());return S.liveSeq}
-function load(){try{const raw=localStorage.getItem(K),s=JSON.parse(raw);if(s&&s.courts){S=s;S.log=S.log||[];S.waiting=S.waiting||[];S.rest=S.rest||{};S.target=S.target||11;S.lv=S.lv||{};S.md=S.md||'bal';S.sd=S.sd||0;S.gp=S.gp||{};resumeLiveSequence();S.wt=normalizeWaitTimes(S.queue||[],S.wt);S.ws=!!S.ws;S.eq=!!S.eq;S.tts=!!S.tts;S.wl=S.wl==null?2:S.wl;S.rr=!!S.rr;S.lr=!!S.lr;S.lpf=!!S.lpf;S.rpf=!!S.rpf;if(s.ended&&s.rid&&!Object.prototype.hasOwnProperty.call(s,'rr'))S.lr=true;S.courts.forEach(c=>{c.score=c.score||[0,0]})}}catch(e){}}
+function load(){try{const raw=localStorage.getItem(K),s=JSON.parse(raw);if(s&&s.courts){S=s;S.log=S.log||[];S.waiting=S.waiting||[];S.rest=S.rest||{};S.fair=normalizeFairnessRecords(S.fair);S.target=S.target||11;S.lv=S.lv||{};S.md=S.md||'bal';S.sd=S.sd||0;S.gp=S.gp||{};resumeLiveSequence();S.wt=normalizeWaitTimes(S.queue||[],S.wt);S.ws=!!S.ws;S.eq=!!S.eq;S.tts=!!S.tts;S.wl=S.wl==null?2:S.wl;S.rr=!!S.rr;S.lr=!!S.lr;S.lpf=!!S.lpf;S.rpf=!!S.rpf;if(s.ended&&s.rid&&!Object.prototype.hasOwnProperty.call(s,'rr'))S.lr=true;S.courts.forEach(c=>{c.score=c.score||[0,0]})}}catch(e){}}
 function save(){S.liveSeq=Math.max(Number.isSafeInteger(S.liveSeq)&&S.liveSeq>=0?S.liveSeq:0,readStoredLiveSequence());try{localStorage.setItem(K,JSON.stringify(S));storageWriteSucceeded('state')}catch(e){storageWriteFailed('state')}pushS()}
 
 function toast(m,type){const d=document.createElement('div');
@@ -800,7 +814,7 @@ if(S.ws&&w>=0){
 const wn=c.players.slice(w*2,w*2+2),lo=c.players.slice((1-w)*2,(1-w)*2+2),key=a=>a.map(x=>x.toLowerCase()).sort().join('|');
 const stk=c.hold&&key(c.hold)==key(wn)?(c.stk||0)+1:1;
 if(!S.wl||stk<S.wl){const ix=pickN(2);
-if(ix.length==2){const ch=ix.map(i=>S.queue[i]);for(let k=ix.length-1;k>=0;k--)S.queue.splice(ix[k],1);S.queue.push(...lo);markWaiting(lo);clearWaiting(ch);
+if(ix.length==2){const ch=ix.map(i=>S.queue[i]);recordRotationSelection(ch,lo);for(let k=ix.length-1;k>=0;k--)S.queue.splice(ix[k],1);S.queue.push(...lo);markWaiting(lo);clearWaiting(ch);
 push(c,'final');const pl=[...wn,...ch];pl.forEach(gpi);
 Object.assign(c,{players:pl,score:[0,0],mid:Math.random().toString(36).slice(2,8),t:Date.now(),hold:wn,stk});
 S.sd++;push(c);save();render();say(n+'. '+wn.join(' and ')+' stay on, versus '+ch.join(' and ')+'.');toast(wn.join(' & ')+' stay on '+n+' ('+stk+' in a row) vs '+ch.join(' & '),'success');return}}
@@ -843,7 +857,7 @@ function cleanState(o){
   const obj=v=>v&&typeof v==='object'&&!Array.isArray(v)?v:{},clean=(src,f)=>{const o={};Object.keys(obj(src)).slice(0,2000).forEach(k=>{const v=f(src[k]);if(v)o[String(k).toLowerCase().slice(0,60)]=v});return o};
   R.rest=clean(s.rest,v=>v?1:0);
   R.lv=clean(s.lv,v=>Math.min(6,Math.max(0,Math.floor(Number(v))||0)));
-  R.md=s.md==='soc'?'soc':'bal';R.sd=Number.isFinite(+s.sd)?+s.sd:0;R.gp=clean(s.gp,v=>Math.max(0,Math.floor(Number(v))||0));R.wt=normalizeWaitTimes(R.queue,s.wt);
+  R.md=s.md==='soc'?'soc':'bal';R.sd=Number.isFinite(+s.sd)?+s.sd:0;R.gp=clean(s.gp,v=>Math.max(0,Math.floor(Number(v))||0));R.fair=normalizeFairnessRecords(s.fair);R.wt=normalizeWaitTimes(R.queue,s.wt);
   R.ws=!!s.ws;R.wl=[2,3,4].includes(+s.wl)?+s.wl:2;R.eq=!!s.eq;R.tts=!!s.tts;R.snd=s.snd!==false;R.hap=s.hap!==false;
   R.target=[11,15,21].includes(+s.target)?+s.target:11;R.wb=s.wb===1?1:2;R.courts=R.courts.slice(0,Math.max(1,Math.min(8,s.courts.length)));
   R.courts=s.courts.slice(0,8).map((c,i)=>{
@@ -908,7 +922,7 @@ function refine4(ix){let best=ix.slice(0,4),bs=rep4(best.map(i=>S.queue[i]));
 if(bs>0){const extra=ix.slice(4,8),base=best.slice();
 for(let e=0;e<extra.length;e++)for(const p of [3,2]){const t=base.slice();t[p]=extra[e];const s=rep4(t.map(i=>S.queue[i]));if(s<bs){bs=s;best=t}}}
 return best.sort((a,b)=>a-b)}
-function takeNext(){const ix=pick4(),nm4=ix.map(i=>S.queue[i]),t=split4(nm4);for(let k=ix.length-1;k>=0;k--)S.queue.splice(ix[k],1);nm4.forEach(gpi);clearWaiting(nm4);S.sd++;return t}
+function takeNext(){const ix=pick4(),nm4=ix.map(i=>S.queue[i]),t=split4(nm4);recordRotationSelection(nm4);for(let k=ix.length-1;k>=0;k--)S.queue.splice(ix[k],1);nm4.forEach(gpi);clearWaiting(nm4);S.sd++;return t}
 function smd(m){S.md=m;save();render()}
 function tws(){S.ws=!S.ws;save();render()}
 function teq(){S.eq=!S.eq;save();render()}
@@ -999,6 +1013,85 @@ function ciAll(){if(!S.waiting||!S.waiting.length)return;const a=S.waiting.splic
 function clAll(){ask('Clear all players?','Removes everyone from the stack and the Not yet here list. Courts and the log stay.',()=>{S.queue=[];S.waiting=[];S.wt={};save();render()})}
 const isRest=n=>!!(S.rest&&S.rest[n.toLowerCase()]);
 const gk=n=>n.toLowerCase(),gpi=n=>{S.gp=S.gp||{};S.gp[gk(n)]=(S.gp[gk(n)]||0)+1},gpd=n=>{S.gp=S.gp||{};S.gp[gk(n)]=Math.max(0,(S.gp[gk(n)]||0)-1)};
+function fairnessEntry(name){
+ const k=safeFairnessKey(name);
+ if(!k)return null;
+ if(!S.fair||typeof S.fair!=='object'||Array.isArray(S.fair))S.fair={};
+ if(!S.fair[k])S.fair[k]={sitouts:0,consecutiveSitouts:0,maxConsecutiveSitouts:0,totalWaitMs:0,waitSamples:0,lastWaitMs:0,lastSelectedAt:0};
+ const f=S.fair[k];
+ ['sitouts','consecutiveSitouts','maxConsecutiveSitouts','waitSamples'].forEach(key=>f[key]=Math.min(1000000,Math.max(0,Math.floor(Number(f[key])||0))));
+ ['totalWaitMs','lastWaitMs'].forEach(key=>f[key]=Math.min(315360000000,Math.max(0,Number(f[key])||0)));
+ f.lastSelectedAt=Math.max(0,Number(f.lastSelectedAt)||0);
+ return f
+}
+function recordRotationSelection(selected,extraWaiting=[]){
+ const picked=new Set((Array.isArray(selected)?selected:[]).map(safeFairnessKey).filter(Boolean)),now=Date.now();
+ (Array.isArray(selected)?selected:[]).forEach(name=>{
+  const f=fairnessEntry(name);if(!f)return;
+  const started=Number(S.wt&&S.wt[wk(name)]);
+  if(started>0&&started<=now){
+   const wait=now-started;f.totalWaitMs=Math.min(315360000000,f.totalWaitMs+wait);f.waitSamples=Math.min(1000000,f.waitSamples+1);f.lastWaitMs=wait;
+  }
+  f.consecutiveSitouts=0;f.lastSelectedAt=now;
+ });
+ const seen=new Set();
+ [...(Array.isArray(S.queue)?S.queue:[]),...(Array.isArray(extraWaiting)?extraWaiting:[])].forEach(name=>{
+  const k=safeFairnessKey(name);if(!k||picked.has(k)||seen.has(k)||isRest(name))return;
+  seen.add(k);const f=fairnessEntry(name);
+  f.sitouts=Math.min(1000000,f.sitouts+1);
+  f.consecutiveSitouts=Math.min(1000000,f.consecutiveSitouts+1);
+  f.maxConsecutiveSitouts=Math.max(f.maxConsecutiveSitouts,f.consecutiveSitouts);
+ });
+}
+function fairnessDuration(ms){
+ const minutes=Math.max(0,Math.floor((Number(ms)||0)/60000));
+ if(minutes<1)return '<1 min';
+ if(minutes<60)return minutes+' min';
+ const hours=Math.floor(minutes/60),rest=minutes%60;
+ return hours+'h'+(rest?' '+rest+'m':'')
+}
+function fairnessParity(values,tolerance=0){
+ if(values.length<2)return null;
+ const lo=Math.min(...values),hi=Math.max(...values),spread=Math.max(0,hi-lo-tolerance);
+ return hi===0?100:Math.max(0,Math.min(100,Math.round((1-spread/hi)*100)))
+}
+function rotationFairness(){
+ const roster=new Map(),add=(name,details={})=>{
+  const label=String(name||'').trim(),key=safeFairnessKey(label);if(!key)return;
+  if(!roster.has(key))roster.set(key,{name:label,queueIndex:-1,court:'',resting:false});
+  Object.assign(roster.get(key),details);
+ };
+ (S.queue||[]).forEach((name,i)=>add(name,{queueIndex:i,resting:isRest(name)}));
+ (S.courts||[]).filter(c=>c&&c.isActive).forEach(c=>(c.players||[]).forEach(name=>add(name,{court:c.name,queueIndex:-1,resting:false})));
+ const rows=[...roster.entries()].map(([key,p])=>{
+  const f=(S.fair&&S.fair[key])||{},games=Math.max(0,Number(S.gp&&S.gp[key])||0);
+  const waitSamples=Math.max(0,Number(f.waitSamples)||0),avgWaitMs=waitSamples?Math.max(0,Number(f.totalWaitMs)||0)/waitSamples:null;
+  const queued=p.queueIndex>=0,currentWaitMs=queued&&!p.resting?Math.max(0,Date.now()-Math.max(0,Number(S.wt&&S.wt[key])||Date.now())):null;
+  const status=p.court?'On '+p.court:p.resting?'Resting':queued?'Queue #'+(p.queueIndex+1):'Not queued';
+  return {key,name:p.name,games,sitouts:Math.max(0,Number(f.sitouts)||0),streak:Math.max(0,Number(f.consecutiveSitouts)||0),maxStreak:Math.max(0,Number(f.maxConsecutiveSitouts)||0),waitSamples,avgWaitMs,currentWaitMs,status,resting:p.resting,queued};
+ });
+ const activeRows=rows.filter(p=>!p.resting),waiting=rows.filter(p=>p.queued&&!p.resting);
+ const averageCurrentWait=waiting.length?waiting.reduce((n,p)=>n+(p.currentWaitMs||0),0)/waiting.length:0;
+ const longWaitThreshold=Math.max(5*60000,averageCurrentWait*1.5);
+ rows.forEach(p=>p.longWait=p.queued&&!p.resting&&p.currentWaitMs>=longWaitThreshold);
+ rows.sort((a,b)=>(b.longWait?1:0)-(a.longWait?1:0)||b.streak-a.streak||(b.currentWaitMs||0)-(a.currentWaitMs||0)||a.name.localeCompare(b.name));
+ const gameScore=fairnessParity(activeRows.map(p=>p.games),1);
+ const waitValues=activeRows.filter(p=>p.avgWaitMs!==null).map(p=>p.avgWaitMs);
+ const waitScore=fairnessParity(waitValues,2*60000);
+ const sitoutScore=fairnessParity(activeRows.map(p=>p.streak),1);
+ const dimensions=[{score:gameScore,weight:40},{score:waitScore,weight:30},{score:sitoutScore,weight:30}].filter(x=>x.score!==null);
+ const hasRotationData=activeRows.some(p=>p.games>0||p.sitouts>0||p.waitSamples>0);
+ const score=hasRotationData&&dimensions.length?Math.round(dimensions.reduce((sum,x)=>sum+x.score*x.weight,0)/dimensions.reduce((sum,x)=>sum+x.weight,0)):null;
+ const totalRotations=Object.values(S.fair||{}).reduce((n,x)=>n+(Number(x&&x.sitouts)||0),0);
+ const scoreLabel=score===null?'Building baseline':score>=85?'Balanced':score>=70?'Some imbalance':'Uneven rotation';
+ const scoreView=score===null?'—':score+'/100';
+ const rowsHtml=rows.length?rows.map(p=>{
+  const avg=p.avgWaitMs===null?'—':fairnessDuration(p.avgWaitMs),current=p.currentWaitMs===null?'—':fairnessDuration(p.currentWaitMs);
+  return '<tr class="border-t border-dark-700"><td class="px-3 py-3"><div class="font-semibold text-white">'+esc(p.name)+'</div><div class="text-[11px] text-gray-400">'+esc(p.status)+(p.longWait?' · <span class="text-amber-400">LONG WAIT</span>':'')+'</div></td><td class="px-3 py-3 text-center tabular-nums">'+p.games+'</td><td class="px-3 py-3 text-center tabular-nums">'+p.sitouts+'</td><td class="px-3 py-3 text-center tabular-nums '+(p.streak>=3?'text-amber-400':'')+'">'+p.streak+'<div class="text-[10px] text-gray-500">Best '+p.maxStreak+'</div></td><td class="px-3 py-3 text-right tabular-nums">'+avg+'</td><td class="px-3 py-3 text-right tabular-nums '+(p.longWait?'text-amber-400':'')+'">'+current+'</td></tr>'
+ }).join(''):'<tr><td colspan="6" class="p-6 text-center text-sm text-gray-400">Check in players and start a match to build rotation data.</td></tr>';
+ const d=modal('<div class="p-5"><div class="flex flex-wrap justify-between items-start gap-3 mb-3"><div><h3 class="text-xl text-white">Player Rotation Fairness</h3><p class="text-xs text-gray-400 mt-1">A read-only view of game distribution and waiting time.</p></div><span class="text-[10px] font-bold text-blue-300 bg-blue-500/10 border border-blue-500/20 rounded-full px-2 py-1">MONITOR</span></div><div class="rounded-xl border border-dark-700 bg-dark-900 p-4 mb-3"><div class="flex items-end justify-between gap-3"><div><div class="text-[11px] uppercase tracking-wide text-gray-400">Rotation balance score</div><div class="font-sport text-4xl text-white">'+scoreView+'</div><div class="text-xs text-gray-400">'+scoreLabel+'</div></div><div class="text-right text-xs text-gray-400">'+activeRows.length+' active players<br>'+totalRotations+' recorded sit-outs</div></div><div class="grid grid-cols-3 gap-2 mt-4 text-center"><div class="rounded-lg bg-dark-800 p-2"><div class="text-[10px] text-gray-400">Games</div><div class="font-sport text-lg text-white">'+(gameScore===null?'—':gameScore)+'</div></div><div class="rounded-lg bg-dark-800 p-2"><div class="text-[10px] text-gray-400">Wait</div><div class="font-sport text-lg text-white">'+(waitScore===null?'—':waitScore)+'</div></div><div class="rounded-lg bg-dark-800 p-2"><div class="text-[10px] text-gray-400">Sit-outs</div><div class="font-sport text-lg text-white">'+(sitoutScore===null?'—':sitoutScore)+'</div></div></div></div><p class="text-[11px] text-gray-400 mb-3">Games counts starts, including active games. Sit-outs count match starts missed while checked in and not resting. The score weights games 40%, average wait 30%, and current sit-out streaks 30%; a one-game or one-round spread is treated as normal. It is a guide, not a ranking. New sit-out and wait history starts with this update; older waits cannot be reconstructed.</p><div class="overflow-x-auto rounded-xl border border-dark-700"><table class="w-full min-w-[620px] text-xs"><thead class="bg-dark-900 text-gray-400"><tr><th class="px-3 py-2 text-left">Player / status</th><th class="px-3 py-2">Games</th><th class="px-3 py-2">Sit-outs</th><th class="px-3 py-2">In a row</th><th class="px-3 py-2 text-right">Avg wait</th><th class="px-3 py-2 text-right">Current wait</th></tr></thead><tbody>'+rowsHtml+'</tbody></table></div><div class="mt-4 flex gap-2"><button class="refresh flex-1 '+bS+'">Refresh</button><button data-x class="flex-1 '+bP+'">Close</button></div></div>');
+ d.querySelector('.refresh').onclick=()=>{d.__close();rotationFairness()};
+}
 function pickN(n){let ix=[];S.queue.forEach((p,i)=>{if(!isRest(p))ix.push(i)});
 if(S.eq){S.wt=normalizeWaitTimes(S.queue,S.wt);const g=i=>(S.gp||{})[gk(S.queue[i])]||0,w=i=>Number(S.wt[wk(S.queue[i])]);ix=ix.slice().sort((a,b)=>g(a)-g(b)||w(a)-w(b)||a-b)}
 if(n===4&&ix.length>4)return refine4(ix);

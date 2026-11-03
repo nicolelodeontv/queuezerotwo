@@ -78,12 +78,12 @@ async function setupFour(page) {
   assert.equal(await page.locator('#qc').innerText(), '4');
 }
 
-async function simulateOldCacheToV33(browser,oldVersion) {
+async function simulateOldCacheToV34(browser,oldVersion) {
   const context = await browser.newContext({...devices['Desktop Chrome'],serviceWorkers:'allow',locale:'en-US'});
   const page = await context.newPage();
   let swFetch = 0;
   const currentSw = fs.readFileSync(path.resolve('sw.js'), 'utf8');
-  assert.match(currentSw,/queuezerotwo-v33/);
+  assert.match(currentSw,/queuezerotwo-v34/);
   const oldSw = `const V='queuezerotwo-v${oldVersion}';self.addEventListener('install',e=>e.waitUntil(caches.open(V).then(c=>c.put('/__queuezerotwo_v${oldVersion}_sentinel__',new Response('v${oldVersion}'))).then(()=>self.skipWaiting())));self.addEventListener('activate',e=>e.waitUntil(self.clients.claim()));`;
   await context.route('**/sw.js', async route => {
     swFetch++;
@@ -101,7 +101,7 @@ async function simulateOldCacheToV33(browser,oldVersion) {
   await page.evaluate(async()=>{const r=await navigator.serviceWorker.getRegistration();await r.update()});
   await page.waitForFunction(async()=>{
     const r=await navigator.serviceWorker.getRegistration();
-    return !!r?.waiting || await caches.has('queuezerotwo-v33');
+    return !!r?.waiting || await caches.has('queuezerotwo-v34');
   },null,{timeout:10000});
   await page.evaluate(async()=>{
     const r=await navigator.serviceWorker.getRegistration();
@@ -109,7 +109,7 @@ async function simulateOldCacheToV33(browser,oldVersion) {
   });
   await page.waitForFunction(async()=>{
     const r=await navigator.serviceWorker.getRegistration();
-    return !!r && !r.waiting && r.active?.state==='activated' && await caches.has('queuezerotwo-v33');
+    return !!r && !r.waiting && r.active?.state==='activated' && await caches.has('queuezerotwo-v34');
   },null,{timeout:10000});
   // The aborted Supabase request must settle before the startup-resume timer
   // fires, leaving one pending state item for queue coalescing to replace.
@@ -119,7 +119,7 @@ async function simulateOldCacheToV33(browser,oldVersion) {
     return q.length===1&&Number.isSafeInteger(q[0]?.payload?.seq);
   },null,{timeout:5000});
   const out=await page.evaluate(async(oldVersion)=>{
-    const cache=await caches.open('queuezerotwo-v33');
+    const cache=await caches.open('queuezerotwo-v34');
     return {
       queue:JSON.parse(localStorage.getItem('queuezerotwo-publish-queue-v1')||'{"items":[]}').items,
       state:JSON.parse(localStorage.getItem('pickleStackState')||'{}'),
@@ -614,6 +614,74 @@ async function leaderboardPodiumRegression(browser) {
 }
 
 
+async function playerRotationFairnessRegression(browser) {
+  const context=await freshContext(browser,devices['Desktop Chrome']);
+  const page=await context.newPage();
+  try {
+    await page.goto(APP,{waitUntil:'networkidle'});
+    await page.locator('button[onclick="rotationFairness()"]').click();
+    const baselineDialog=page.locator('[role="dialog"]').last();
+    const baselineText=await baselineDialog.innerText();
+    assert.match(baselineText,/Building baseline/,'An untouched session does not show a misleading perfect score');
+    await baselineDialog.getByRole('button',{name:'Close'}).click();
+    const outcome=await page.evaluate(()=>{
+      pushS=()=>{};
+      S=mk();
+      const now=Date.now();
+      S.queue=['Ava','Ben','Cara','Dan','Eli','Fay','Gus','Hana','Ivy','Jules','Kai','Lena'];
+      S.rest={fay:1};
+      S.wt=Object.fromEntries(S.queue.map(n=>[n.toLowerCase(),now-(String(n).toLowerCase()==='lena'?35:5)*60000]));
+      const first=takeNext();
+      Object.assign(S.courts[0],{isActive:true,players:first,score:[4,2],mid:'FAIR001',t:now-300000});
+      const second=takeNext();
+      Object.assign(S.courts[1],{isActive:true,players:second,score:[3,1],mid:'FAIR002',t:now-180000});
+      const records=JSON.parse(JSON.stringify(S.fair));
+      const helperState=S;
+      S=mk();
+      S.queue=['Queue player','Resting'];
+      S.rest={resting:1};
+      recordRotationSelection(['Challenger 1','Challenger 2'],['Losing 1','Losing 2']);
+      const winnersStay={
+        losingPair:[S.fair['losing 1']?.sitouts||0,S.fair['losing 2']?.sitouts||0],
+        queued:S.fair['queue player']?.sitouts||0,
+        resting:S.fair.resting?.sitouts||0,
+        selected:S.fair['challenger 1']?.consecutiveSitouts||0
+      };
+      const imported=cleanState({courts:[{id:1,name:'Court 1',isActive:false,players:[],score:[0,0]}],fair:{ava:{sitouts:7,consecutiveSitouts:2,maxConsecutiveSitouts:3,totalWaitMs:900000,waitSamples:2,lastWaitMs:300000,lastSelectedAt:now},invalid:'bad'}});
+      const unsafeFair=cleanState({courts:[{id:1,name:'Court 1',isActive:false,players:[],score:[0,0]}],fair:JSON.parse('{"__proto__":{"sitouts":99},"constructor":{"sitouts":88}}')}).fair;
+      S=helperState;
+      render();
+      return {records,winnersStay,importRoundTrip:imported.fair.ava,noInvalidImport:!Object.prototype.hasOwnProperty.call(imported.fair,'invalid'),unsafeFairKeys:Object.keys(unsafeFair),safeFairPrototype:Object.getPrototypeOf(unsafeFair)===Object.prototype};
+    });
+    assert.equal(outcome.records.eli.sitouts,1,'Players waiting behind the first court selection get a sit-out');
+    assert.equal(outcome.records.eli.consecutiveSitouts,0,'A selected player has their consecutive sit-out streak reset');
+    assert.equal(outcome.records.jules.sitouts,2,'A player left in the queue through two selections gets two sit-outs');
+    assert.equal(outcome.records.jules.consecutiveSitouts,2,'Consecutive sit-outs accumulate across match starts');
+    assert.equal(outcome.records.fay?.sitouts||0,0,'Players who are resting are not counted as eligible sit-outs');
+    assert.ok(outcome.records.ava.waitSamples===1&&outcome.records.ava.totalWaitMs>=4*60000,'Selecting a player records their queue wait');
+    assert.deepEqual(outcome.winnersStay,{losingPair:[1,1],queued:1,resting:0,selected:0},
+      'A winners-stay selection counts the losing pair and idle eligible queue while excluding resting players');
+    assert.equal(outcome.importRoundTrip.sitouts,7,'Fairness counters survive a validated backup import');
+    assert.equal(outcome.importRoundTrip.totalWaitMs,900000);
+    assert.equal(outcome.noInvalidImport,true,'Invalid fairness records are discarded during backup import');
+    assert.deepEqual(outcome.unsafeFairKeys,[],'Prototype-sensitive fairness keys are discarded from imported backups');
+    assert.equal(outcome.safeFairPrototype,true,'Imported fairness data retains a normal, unpolluted object prototype');
+    await page.locator('button[onclick="rotationFairness()"]').click();
+    const dialog=page.locator('[role="dialog"]').last();
+    await dialog.getByText('Player Rotation Fairness',{exact:true}).waitFor({state:'visible',timeout:5000});
+    const text=await dialog.innerText();
+    assert.match(text,/Rotation balance score/i);
+    assert.match(text,/Avg wait/i);
+    assert.match(text,/LONG WAIT/,'The player with the unusually long current wait is flagged');
+    assert.match(text,/Lena/);
+    assert.match(text,/Sit-outs/);
+    assert.match(text,/Best/,'The monitor shows each player’s longest sit-out streak too');
+    await dialog.getByRole('button',{name:'Close'}).click();
+  } finally {
+    await context.close();
+  }
+}
+
 async function avatarProfileRegression(browser) {
   const context = await freshContext(browser, devices['Desktop Chrome']);
   const page = await context.newPage();
@@ -690,13 +758,14 @@ async function main() {
   await Promise.all([desktop,iphone,pixel].map(context=>context.tracing.start({screenshots:true,snapshots:true,sources:true})));
   const syncPublishes = [];
   const resultPublishes = [];
-  for(let oldVersion=1;oldVersion<=32;oldVersion++){
-    await simulateOldCacheToV33(browser,oldVersion);
+  for(let oldVersion=1;oldVersion<=33;oldVersion++){
+    await simulateOldCacheToV34(browser,oldVersion);
   }
   await earlyFinishWinnerPromptRegression(browser);
   await mobileEarlyFinishUndoRegression(browser);
   await avatarProfileRegression(browser);
   await leaderboardPodiumRegression(browser);
+  await playerRotationFairnessRegression(browser);
   await durableQueueCompactionRegression(browser);
   const sync = await syncContext(browser, devices['Pixel 7'], syncPublishes, resultPublishes);
   const sp = await sync.newPage();
@@ -1926,7 +1995,7 @@ async function main() {
       hostileImportedSessionNameSafe: true,
       resultsQrResponsiveAndShareImage: true,
       resultsBackupRestoresNameAndMatchLog: true,
-      serviceWorkerV1ToV32UpgradeToV33: true,
+      serviceWorkerV1ToV33UpgradeToV34: true,
       earlyFinishWinnerPrompt: true,
       mobileEarlyFinishUndo: true,
       deleteWorks: true,

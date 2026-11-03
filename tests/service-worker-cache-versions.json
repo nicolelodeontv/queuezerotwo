@@ -4,10 +4,11 @@
     61,
     62,
     63,
-    65
+    65,
+    66
   ],
-  "currentBranch": "feature/live-view-reliability-monitor",
-  "currentCache": "queuezerotwo-v33",
+  "currentBranch": "feature/player-rotation-fairness",
+  "currentCache": "queuezerotwo-v34",
   "allocations": [
     {
       "cache": "queuezerotwo-v1",
@@ -177,9 +178,16 @@
     },
     {
       "cache": "queuezerotwo-v33",
-      "status": "reserved",
+      "status": "released",
       "pr": 65,
-      "branch": "feature/live-view-reliability-monitor"
+      "branch": "feature/live-view-reliability-monitor",
+      "merge_commit_sha": "0eb3d1ce4309ef298fd2414a74967e0a47137226"
+    },
+    {
+      "cache": "queuezerotwo-v34",
+      "status": "reserved",
+      "pr": 66,
+      "branch": "feature/player-rotation-fairness"
     }
   ]
 }
