@@ -78,17 +78,20 @@ async function setupFour(page) {
   assert.equal(await page.locator('#qc').innerText(), '4');
 }
 
-async function simulateV25ToV30(browser) {
+async function simulateOldCacheToV31(browser,oldVersion) {
   const context = await browser.newContext({...devices['Desktop Chrome'],serviceWorkers:'allow',locale:'en-US'});
   const page = await context.newPage();
   let swFetch = 0;
   const currentSw = fs.readFileSync(path.resolve('sw.js'), 'utf8');
-  assert.match(currentSw,/queuezerotwo-v30/);
-  const oldV25 = `const V='queuezerotwo-v25';self.addEventListener('install',e=>e.waitUntil(caches.open(V).then(c=>c.put('/__queuezerotwo_v25_sentinel__',new Response('v25'))).then(()=>self.skipWaiting())));self.addEventListener('activate',e=>e.waitUntil(self.clients.claim()));`;
+  assert.match(currentSw,/queuezerotwo-v31/);
+  const oldSw = `const V='queuezerotwo-v${oldVersion}';self.addEventListener('install',e=>e.waitUntil(caches.open(V).then(c=>c.put('/__queuezerotwo_v${oldVersion}_sentinel__',new Response('v${oldVersion}'))).then(()=>self.skipWaiting())));self.addEventListener('activate',e=>e.waitUntil(self.clients.claim()));`;
   await context.route('**/sw.js', async route => {
     swFetch++;
-    await route.fulfill({status:200,contentType:'application/javascript',body:swFetch===1?oldV25:currentSw});
+    await route.fulfill({status:200,contentType:'application/javascript',body:swFetch===1?oldSw:currentSw});
   });
+  // Prevent real session writes in this cache-upgrade test while allowing the
+  // app to remain online so 127.0.0.1 navigation still works without SW fallback.
+  await context.route(SUPABASE+'/**',route=>route.abort());
   await page.goto(APP,{waitUntil:'networkidle'});
   await page.waitForFunction(()=>!!navigator.serviceWorker?.controller,null,{timeout:5000});
   await page.evaluate(()=>{
@@ -98,7 +101,7 @@ async function simulateV25ToV30(browser) {
   await page.evaluate(async()=>{const r=await navigator.serviceWorker.getRegistration();await r.update()});
   await page.waitForFunction(async()=>{
     const r=await navigator.serviceWorker.getRegistration();
-    return !!r?.waiting || await caches.has('queuezerotwo-v30');
+    return !!r?.waiting || await caches.has('queuezerotwo-v31');
   },null,{timeout:10000});
   await page.evaluate(async()=>{
     const r=await navigator.serviceWorker.getRegistration();
@@ -106,77 +109,39 @@ async function simulateV25ToV30(browser) {
   });
   await page.waitForFunction(async()=>{
     const r=await navigator.serviceWorker.getRegistration();
-    return !!r && !r.waiting && r.active?.state==='activated' && await caches.has('queuezerotwo-v30');
+    return !!r && !r.waiting && r.active?.state==='activated' && await caches.has('queuezerotwo-v31');
   },null,{timeout:10000});
+  // The aborted Supabase request must settle before the startup-resume timer
+  // fires, leaving one pending state item for queue coalescing to replace.
   await page.reload({waitUntil:'networkidle'});
-  const out=await page.evaluate(async()=>{
-    const cache=await caches.open('queuezerotwo-v30');
+  await page.waitForFunction(()=>{
+    const q=JSON.parse(localStorage.getItem('queuezerotwo-publish-queue-v1')||'{"items":[]}').items;
+    return q.length===1&&Number.isSafeInteger(q[0]?.payload?.seq);
+  },null,{timeout:5000});
+  const out=await page.evaluate(async(oldVersion)=>{
+    const cache=await caches.open('queuezerotwo-v31');
     return {
       queue:JSON.parse(localStorage.getItem('queuezerotwo-publish-queue-v1')||'{"items":[]}').items,
       state:JSON.parse(localStorage.getItem('pickleStackState')||'{}'),
-      oldCache:await caches.has('queuezerotwo-v25'),
+      oldCache:await caches.has('queuezerotwo-v'+oldVersion),
       profilesCached:!!(await cache.match('/profiles.js'))
     };
-  });
-  assert.equal(out.oldCache,false);
+  },oldVersion);
+  assert.equal(out.oldCache,false,'The previous v'+oldVersion+' cache is removed');
   assert.equal(out.profilesCached,true,'profiles.js is present in the offline shell cache');
   assert.equal(out.queue.length,1);
   assert.equal(out.queue[0].sid,'PERSISTEDSID');
+  assert.ok(Number.isSafeInteger(out.queue[0].payload.seq),'Startup publishes the persisted host state with a numeric sequence');
+  assert.equal(out.queue[0].payload.seq,out.state.liveSeq,'The queued snapshot uses the sequence persisted on the host');
   assert.match(out.queue[0].id,/^[0-9a-f]{32}$/);
   assert.equal(out.state.queue[0],'Persisted player');
   assert.equal(out.state.sid,'PERSISTEDSID');
   await context.close();
 }
-
-async function simulateV26ToV30(browser) {
-  const context = await browser.newContext({...devices['Desktop Chrome'],serviceWorkers:'allow',locale:'en-US'});
-  const page = await context.newPage();
-  let swFetch = 0;
-  const currentSw = fs.readFileSync(path.resolve('sw.js'), 'utf8');
-  assert.match(currentSw,/queuezerotwo-v30/);
-  const oldV26 = `const V='queuezerotwo-v26';self.addEventListener('install',e=>e.waitUntil(caches.open(V).then(c=>c.put('/__queuezerotwo_v26_sentinel__',new Response('v26'))).then(()=>self.skipWaiting())));self.addEventListener('activate',e=>e.waitUntil(self.clients.claim()));`;
-  await context.route('**/sw.js', async route => {
-    swFetch++;
-    await route.fulfill({status:200,contentType:'application/javascript',body:swFetch===1?oldV26:currentSw});
-  });
-  await page.goto(APP,{waitUntil:'networkidle'});
-  await page.waitForFunction(()=>!!navigator.serviceWorker?.controller,null,{timeout:5000});
-  await page.evaluate(()=>{
-    localStorage.setItem('pickleStackState',JSON.stringify({courts:[{id:1,name:'Court 1',isActive:false,players:[],score:[0,0],mid:'',t:0}],queue:['Persisted player'],waiting:[],rest:{},log:[],target:11,lv:{},md:'bal',sd:0,gp:{},wt:{},ws:false,wl:2,eq:false,tts:false,hap:true,sid:'PERSISTEDSID',sh:'a'.repeat(64)}));
-    localStorage.setItem('queuezerotwo-publish-queue-v1',JSON.stringify({v:1,seq:1,items:[{seq:1,sid:'PERSISTEDSID',sh:'a'.repeat(64),kind:'state',attempts:0,lastError:'',payload:{t:11,q:['Persisted player'],courts:[],nx:[],lb:[]}}]}));
-  });
-  await page.evaluate(async()=>{const r=await navigator.serviceWorker.getRegistration();await r.update()});
-  await page.waitForFunction(async()=>{
-    const r=await navigator.serviceWorker.getRegistration();
-    return !!r?.waiting || await caches.has('queuezerotwo-v30');
-  },null,{timeout:10000});
-  await page.evaluate(async()=>{
-    const r=await navigator.serviceWorker.getRegistration();
-    if(r?.waiting)r.waiting.postMessage('SKIP_WAITING');
-  });
-  await page.waitForFunction(async()=>{
-    const r=await navigator.serviceWorker.getRegistration();
-    return !!r && !r.waiting && r.active?.state==='activated' && await caches.has('queuezerotwo-v30');
-  },null,{timeout:10000});
-  await page.reload({waitUntil:'networkidle'});
-  const out=await page.evaluate(async()=>{
-    const cache=await caches.open('queuezerotwo-v30');
-    return {
-      queue:JSON.parse(localStorage.getItem('queuezerotwo-publish-queue-v1')||'{"items":[]}').items,
-      state:JSON.parse(localStorage.getItem('pickleStackState')||'{}'),
-      oldCache:await caches.has('queuezerotwo-v26'),
-      profilesCached:!!(await cache.match('/profiles.js'))
-    };
-  });
-  assert.equal(out.oldCache,false);
-  assert.equal(out.profilesCached,true,'profiles.js is present in the offline shell cache');
-  assert.equal(out.queue.length,1);
-  assert.equal(out.queue[0].sid,'PERSISTEDSID');
-  assert.match(out.queue[0].id,/^[0-9a-f]{32}$/);
-  assert.equal(out.state.queue[0],'Persisted player');
-  assert.equal(out.state.sid,'PERSISTEDSID');
-  await context.close();
-}
+async function simulateV25ToV31(browser){return simulateOldCacheToV31(browser,25)}
+async function simulateV26ToV31(browser){return simulateOldCacheToV31(browser,26)}
+async function simulateV29ToV31(browser){return simulateOldCacheToV31(browser,29)}
+async function simulateV30ToV31(browser){return simulateOldCacheToV31(browser,30)}
 
 async function simulateV29ToV30(browser) {
   const context = await browser.newContext({...devices['Desktop Chrome'],serviceWorkers:'allow',locale:'en-US'});
@@ -472,9 +437,10 @@ async function main() {
   await Promise.all([desktop,iphone,pixel].map(context=>context.tracing.start({screenshots:true,snapshots:true,sources:true})));
   const syncPublishes = [];
   const resultPublishes = [];
-  await simulateV25ToV30(browser);
-  await simulateV26ToV30(browser);
-  await simulateV29ToV30(browser);
+  await simulateV25ToV31(browser);
+  await simulateV26ToV31(browser);
+  await simulateV29ToV31(browser);
+  await simulateV30ToV31(browser);
   await avatarProfileRegression(browser);
   await leaderboardPodiumRegression(browser);
   await durableQueueCompactionRegression(browser);
@@ -533,21 +499,22 @@ async function main() {
     assert.doesNotMatch(liveViewerText,/Reyes|Rivera|Lopez|Chen|Diaz/);
 
     // The publish contract is exercised against payloads built by the real client helpers.
-    const clientPayloadContract=await sp.evaluate(()=>{
-      const oldS=S,oldSV=SV,oldV=V,oldRA=RA;
+    const clientPayloadContract=await sp.evaluate(async()=>{
+      const oldS=S,oldSV=SV,oldV=V,oldRA=RA,oldStored=localStorage.getItem(K);
       S=mk();
       const names=['Ari | 東京 🌱','Mika Café|星','Noah | 🥒','Zoë 北'];
       S.queue=names.slice(0,1);
       S.lv={'ari | 東京 🌱':4,'mika café|星':3,'noah | 🥒':2,'zoë 北':5};
-      const empty=sdata();
+      const empty=await sdata();
       S.queue=names.slice();
-      const populated=sdata();
+      const populated=await sdata();
       const allNames=Array.from({length:200},(_,i)=>String(i+1).padStart(3,'0')+'|東京🌱');
       S.log=Array.from({length:500},(_,i)=>({
         p:[allNames[(i*4)%200],allNames[(i*4+1)%200],allNames[(i*4+2)%200],allNames[(i*4+3)%200]],
         s:[11,9],w:0,c:'Court '+(i%8+1),tg:11,t:1760000000000+i,d:600000
       }));
       const results=resultsSnapshot(),bytes=new Blob([JSON.stringify(results)]).size;
+      if(oldStored===null)localStorage.removeItem(K);else localStorage.setItem(K,oldStored);
       S=oldS;SV=oldSV;V=oldV;RA=oldRA;render();
       return {
         empty,
@@ -717,7 +684,8 @@ async function main() {
     assert.match(codeCheck.source,/LIVE_ALPH/);
     assert.equal(codeCheck.alphabet,'ABCDEFGHJKLMNPQRSTUVWXYZ23456789');
     assert.equal(codeCheck.samples.every(x=>new RegExp('^['+codeCheck.alphabet+']{10}$').test(x)),true);
-    // Release 1: failed whole-state publishes queue locally and drain FIFO after reconnect.
+    // Release 1: three offline state snapshots for one host coalesce to the newest
+    // durable item, then reconnect sends exactly one RPC with the highest sequence.
     await setupFour(sp);
     await sp.evaluate(async () => {
       if ('serviceWorker' in navigator) await navigator.serviceWorker.ready;
@@ -729,19 +697,37 @@ async function main() {
     await sync.setOffline(true);
     await sp.locator('#go').click();
     await sp.evaluate(() => document.getElementById('nvp')?.click());
-    await sp.locator('button[aria-label="Plus point, Team 1"]').first().click();
-    await sleep(700);
-    assert.equal(await sp.evaluate(() => navigator.onLine), false);
+    const offlineStateBatch = await sp.evaluate(async () => {
+      if (st) { clearTimeout(st); st = null; }
+      PQ = [];
+      PQS = 0;
+      savePublishQueue();
+      const seqs = [];
+      for (let i = 0; i < 3; i++) {
+        S.courts[0].score = [i + 1, 4];
+        const payload = await sdata();
+        if (!queuePublishPayload(payload, S.sid, S.sh, 'state')) {
+          throw new Error('Offline state snapshot was not queued');
+        }
+        seqs.push(payload.seq);
+      }
+      const items = JSON.parse(localStorage.getItem('queuezerotwo-publish-queue-v1') || '{"items":[]}').items;
+      return {
+        online: navigator.onLine,
+        seqs,
+        liveSeq: S.liveSeq,
+        queueLength: items.length,
+        queued: items.map(x => ({seq:x.payload?.seq,score:x.payload?.courts?.find(c => c.a)?.s?.[0]}))
+      };
+    });
+    assert.equal(offlineStateBatch.online, false);
+    assert.equal(offlineStateBatch.queueLength, 1, 'Three offline state snapshots leave one pending item');
+    assert.deepEqual(offlineStateBatch.seqs, [...offlineStateBatch.seqs].sort((a,b)=>a-b));
+    assert.equal(offlineStateBatch.seqs.length, 3);
+    assert.equal(offlineStateBatch.liveSeq, offlineStateBatch.seqs[2]);
+    assert.deepEqual(offlineStateBatch.queued, [{seq:offlineStateBatch.seqs[2],score:3}],
+      'The newest full-state snapshot replaces the two older pending snapshots');
     assert.match(await sp.locator('#ct').innerText(), /Offline/);
-    assert.equal(await sp.evaluate(() => JSON.parse(localStorage.getItem('queuezerotwo-publish-queue-v1')||'{"items":[]}').items.length), 1);
-    await sp.locator('button[aria-label="Plus point, Team 1"]').first().click();
-    await sleep(700);
-    assert.equal(await sp.evaluate(() => JSON.parse(localStorage.getItem('queuezerotwo-publish-queue-v1')||'{"items":[]}').items.length), 1);
-    // Superseded whole-state snapshots are coalesced; the newest remains durable until reconnect.
-    // Offline page-reload behavior remains part of the physical PWA pass because browser network emulation can bypass SW navigation.
-    const persistedQueue = await sp.evaluate(() => JSON.parse(localStorage.getItem('queuezerotwo-publish-queue-v1')||'{"items":[]}').items);
-    assert.equal(persistedQueue.length, 1);
-    assert.equal((persistedQueue[0].payload.courts||[]).find(v=>v.a)?.s?.[0], 2);
     await sync.setOffline(false);
     await sp.waitForFunction(
       () => JSON.parse(localStorage.getItem('queuezerotwo-publish-queue-v1')||'{"items":[]}').items.length === 0,
@@ -749,19 +735,49 @@ async function main() {
       {timeout:5000},
     );
     assert.match(await sp.locator('#ct').innerText(), /Saved on this device/);
-    const queuedScores = syncPublishes.slice(-1).map(x => {
-      const c = (x.p_payload?.courts || []).find(v => v.a);
-      return c?.s?.[0];
+    assert.equal(syncPublishes.length, 1, 'Reconnect sends exactly one state RPC after three offline snapshots');
+    assert.equal(syncPublishes[0].p_payload.seq, offlineStateBatch.seqs[2],
+      'The one reconnect RPC carries the highest persisted sequence');
+    assert.equal((syncPublishes[0].p_payload.courts||[]).find(v => v.a)?.s?.[0], 3,
+      'The one reconnect RPC carries the newest score');
+    
+    // Expired active sessions return the same combined RPC error. Without a
+    // recent local handoff, rotate the identity and retry rather than retrying forever.
+    await sp.evaluate(()=>{
+      const oldSid='EXPIRED01',oldSh='e'.repeat(64);
+      S.ho=false;S.hoff=0;S.ended=false;S.sid=oldSid;S.sh=oldSh;S.lpf=false;
+      PQ=[{id:'expired-host-entry-98',seq:98,sid:oldSid,sh:oldSh,kind:'state',attempts:0,lastError:'',payload:{t:11,wb:2,courts:[],nx:[],up:[],tm:null,q:[],lb:[]}}];
+      PQS=98;savePublishQueue();clearTimeout(PQRetry);PQRetry=null;
+      window.__expiredSessionRpcCalls=[];
+      sb.rpc=async(name,args)=>{
+        window.__expiredSessionRpcCalls.push({name,code:args.p_code,key:args.p_host_key});
+        if(args.p_code===oldSid)return {error:new Error('Invalid host key or expired session.')};
+        return {data:true,error:null};
+      };
     });
-    assert.deepEqual(queuedScores, [2], 'the latest queued whole-state snapshot is published after reconnect');
+    await sp.evaluate(()=>flushPublishQueue());
+    const expiredRecovery=await sp.evaluate(()=>({
+      sid:S.sid,sh:S.sh,queueLength:PQ.length,
+      calls:window.__expiredSessionRpcCalls.slice(),
+      notice:[...document.querySelectorAll('#msg .mb')].map(x=>x.textContent).find(x=>/previous Live View expired/i.test(x))||''
+    }));
+    assert.notEqual(expiredRecovery.sid,'EXPIRED01','Expired session recovery creates a new Live View code');
+    assert.match(expiredRecovery.sid,/^[A-Z2-9]{10}$/);
+    assert.notEqual(expiredRecovery.sh,'e'.repeat(64),'Expired session recovery creates a new host key');
+    assert.equal(expiredRecovery.queueLength,0,'A successfully recovered expired publish leaves no queued item');
+    assert.equal(expiredRecovery.calls.length,2,'The expired code is attempted once, followed by one fresh-session retry');
+    assert.equal(expiredRecovery.calls[0].code,'EXPIRED01');
+    assert.equal(expiredRecovery.calls[1].code,expiredRecovery.sid);
+    assert.equal(expiredRecovery.calls[1].key,expiredRecovery.sh);
+    assert.match(expiredRecovery.notice,/new link is ready to share/i);
 
     // Regression: the server intentionally folds a stale host-key rejection into the
-    // message "Invalid host key or expired session". It must demote the old host rather
-    // than mistake the combined message for an expired code and create a fresh session.
+    // message "Invalid host key or expired session". A recent local handoff must demote
+    // the old host rather than creating a replacement session.
     await sp.evaluate(() => {
       const oldSid='OLDHANDOFF',oldSh='a'.repeat(64);
       S.sid=oldSid;S.sh=oldSh;S.ho=false;S.hoff=Date.now();
-      PQ=[{id:'old-host-entry-99',seq:99,sid:oldSid,sh:oldSh,kind:'state',attempts:1,lastError:'',payload:sdata()}];
+      PQ=[{id:'old-host-entry-99',seq:99,sid:oldSid,sh:oldSh,kind:'state',attempts:1,lastError:'',payload:{t:11,wb:2,courts:[],nx:[],up:[],tm:null,q:[],lb:[]}}];
       PQS=99;savePublishQueue();clearTimeout(PQRetry);PQRetry=null;
       window.__handoffRpcCalls=[];
       sb.rpc=async(name,args)=>{
@@ -794,7 +810,7 @@ async function main() {
       S.rid = '';
       S.rr = false;
       S.lr = false;
-      PQ = [{id:'stale-session-entry-101',seq:101,sid:'STALESESSION',sh:'c'.repeat(64),kind:'state',attempts:0,lastError:'',payload:sdata()}];
+      PQ = [{id:'stale-session-entry-101',seq:101,sid:'STALESESSION',sh:'c'.repeat(64),kind:'state',attempts:0,lastError:'',payload:{t:11,wb:2,courts:[],nx:[],up:[],tm:null,q:[],lb:[]}}];
       PQS = 101;
       savePublishQueue();
       window.__freshSessionPublish = null;
@@ -851,7 +867,7 @@ async function main() {
         if (name === 'publish_pickle_session') window.__freshWrites.push(args.p_code);
         return Promise.resolve({data:true,error:null});
       };
-      PQ = [{id:'old-inflight-entry-150',seq:150,sid:S.sid,sh:S.sh,kind:'state',attempts:2,lastError:'',payload:sdata()}];
+      PQ = [{id:'old-inflight-entry-150',seq:150,sid:S.sid,sh:S.sh,kind:'state',attempts:2,lastError:'',payload:{t:11,wb:2,courts:[],nx:[],up:[],tm:null,q:[],lb:[]}}];
       PQS = 150;
       savePublishQueue();
       void flushPublishQueue();
@@ -861,11 +877,11 @@ async function main() {
     await sp.locator('[role="dialog"] .nw').click();
     await sp.getByRole('button',{name:'Confirm'}).click();
     await sp.waitForFunction(() => !S.ended && S.ho !== true);
-    const freshIdentity = await sp.evaluate(() => {
+    const freshIdentity = await sp.evaluate(async () => {
       clearTimeout(st);
       ensureLiveIdentity();
       const identity = {sid:S.sid,sh:S.sh,oldEntryId:'old-inflight-entry-150'};
-      queuePublishPayload(sdata(),S.sid,S.sh);
+      queuePublishPayload(await sdata(),S.sid,S.sh);
       return {...identity,freshEntryId:PQ[0]?.id,freshEntryPosition:PQ.findIndex(x=>x.sid===S.sid&&x.sh===S.sh)};
     });
     assert.notEqual(freshIdentity.sid,'OLDINFLIGHT');
@@ -893,7 +909,7 @@ async function main() {
     await sp.evaluate(() => {
       const sid='STUCKSYNC',sh='b'.repeat(64);
       S.ho=false;S.sid=sid;S.sh=sh;S.hoff=0;
-      PQ=[{id:'stuck-entry-100',seq:100,sid,sh,kind:'state',attempts:2,lastError:'',payload:sdata()}];
+      PQ=[{id:'stuck-entry-100',seq:100,sid,sh,kind:'state',attempts:2,lastError:'',payload:{t:11,wb:2,courts:[],nx:[],up:[],tm:null,q:[],lb:[]}}];
       PQS=100;savePublishQueue();clearTimeout(PQRetry);PQRetry=null;
       sb.rpc=async()=>({error:new Error('Server unavailable.')});
       syncMarker();
@@ -909,6 +925,32 @@ async function main() {
     const queuePage=await queueContext.newPage();
     await setupFour(queuePage);
     assert.equal(await queuePage.evaluate(()=>innerWidth),1280,'queue failure regression runs at desktop width');
+
+    const startupGuards=await queuePage.evaluate(()=>{
+      const previous={S,V,SV,RA,pushS};
+      let calls=0;
+      pushS=()=>{calls++};
+      const check=(patch,navigationType='reload')=>{
+        S=Object.assign(mk(),{sid:'STARTUP01',sh:'f'.repeat(64),ended:false,ho:false},patch);
+        return resumeHostStateOnStartup({type:navigationType})
+      };
+      const ended=check({ended:true});
+      const handedOff=check({ho:true});
+      const missingSid=check({sid:''});
+      const missingHostKey=check({sh:''});
+      const newTab=check({},'navigate');
+      const normalReload=check({},'reload');
+      const count=calls;
+      S=previous.S;V=previous.V;SV=previous.SV;RA=previous.RA;pushS=previous.pushS;
+      return {ended,handedOff,missingSid,missingHostKey,newTab,normalReload,count};
+    });
+    assert.equal(startupGuards.ended,false,'Ended sessions never auto-publish on startup');
+    assert.equal(startupGuards.handedOff,false,'A host that handed off never auto-publishes on startup');
+    assert.equal(startupGuards.missingSid,false,'An imported backup without a session ID never auto-publishes');
+    assert.equal(startupGuards.missingHostKey,false,'A session without a host key never auto-publishes');
+    assert.equal(startupGuards.newTab,false,'A newly opened host tab does not auto-publish a competing snapshot');
+    assert.equal(startupGuards.normalReload,true,'An active owned session resumes publishing after a reload');
+    assert.equal(startupGuards.count,1,'Only an active owned reload schedules startup publishing');
 
     await queuePage.evaluate(() => {
       const sid='VALIDATIONQ1',sh='d'.repeat(64);

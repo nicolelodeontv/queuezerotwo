@@ -12,6 +12,8 @@ on:
   push:
     branches: [main]
   workflow_dispatch:
+  schedule:
+    - cron: '0 18 * * *'
 
 permissions:
   contents: read
@@ -68,6 +70,8 @@ jobs:
           Path("/tmp/queuezerotwo-inline.js").write_text(h[start+8:end], encoding="utf-8")
           PY
           node --check /tmp/queuezerotwo-inline.js
+      - name: Verify unique service-worker cache allocations
+        run: node tests/service-worker-cache-versions.mjs
       - name: Check Preview configuration build script
         run: node --check scripts/configure-preview.mjs
       - name: Test Production and Preview CSP rules
@@ -88,12 +92,18 @@ jobs:
         run: node tests/release2b-sessions.mjs
       - name: Check Nyork two-browser integration test syntax
         run: node --check tests/nyork-two-browser-live.mjs
-      - name: Run Nyork real-backend two-browser host/viewer test
+      - name: Run Nyork Broadcast, hostile-input, and reconnect tests (3 PR repeats; 10 nightly/manual)
+        if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
         env:
           APP_URL: http://127.0.0.1:4173/
           NYORK_SUPABASE_URL: https://yeytqiyhosoyuassjcef.supabase.co
           NYORK_SUPABASE_PUBLISHABLE_KEY: sb_publishable_k41MPtlaBwnddBd6QIutTQ_kMWbeN7T
+          NYORK_REPEAT_COUNT: ${{ (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') && '10' || '3' }}
+          NYORK_BROADCAST_ITERATIONS: '2'
         run: node tests/nyork-two-browser-live.mjs
+      - name: Skip Nyork integration for fork pull requests
+        if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository
+        run: echo "Skipping the Nyork write-capable integration test for an outside fork."
       - name: Upload Playwright failure diagnostics
         if: failure()
         uses: actions/upload-artifact@v4

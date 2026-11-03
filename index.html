@@ -352,7 +352,7 @@ function savePublishQueue(){
   catch(e){storageWriteFailed('queue');return false}
 }
 function clearPublishQueue(){PQ=[];PQS=0;if(PQRetry){clearTimeout(PQRetry);PQRetry=null}savePublishQueue();syncMarker()}
-function persistStateOnly(){try{localStorage.setItem(K,JSON.stringify(S));storageWriteSucceeded('state');return true}catch(e){storageWriteFailed('state');return false}}
+function persistStateOnly(){S.liveSeq=Math.max(Number.isSafeInteger(S.liveSeq)&&S.liveSeq>=0?S.liveSeq:0,readStoredLiveSequence());try{localStorage.setItem(K,JSON.stringify(S));storageWriteSucceeded('state');return true}catch(e){storageWriteFailed('state');return false}}
 function syncMarker(){
   const on=navigator.onLine,pending=PQ.length>0,stuck=pending&&on&&PQ.some(x=>x.attempts>=3);
   if(S&&S.ho){
@@ -399,21 +399,31 @@ async function publishQueuedItem(item){
   }else{
     q=await sb.rpc('publish_pickle_session',{p_code:item.sid,p_host_key:item.sh,p_payload:item.payload});
   }
-  const msg=q.error&&q.error.message||'';
-  // The server intentionally returns "Invalid host key or expired session" for a stale host after handoff.
-  // A mismatched host key must demote this device, not trigger expired-session recovery.
-  if(q.error&&/expired session/i.test(msg)&&!/invalid host key/i.test(msg)&&!item.rid&&item.sid===S.sid&&item.sh===S.sh&&!S.ho){
-    const oldSid=item.sid,oldSh=item.sh,nid=randLiveCode(),nkey=randHostKey();
-    S.sid=nid;S.sh=nkey;
-    PQ.forEach(x=>{if(x.sid===oldSid&&x.sh===oldSh){x.sid=nid;x.sh=nkey}});
-    persistStateOnly();savePublishQueue();
-    item.sid=nid;item.sh=nkey;
-    q=await sb.rpc('publish_pickle_session',{p_code:item.sid,p_host_key:item.sh,p_payload:item.payload});
-  }
-  if(q.error&&/Invalid host key/i.test(q.error.message||'')&&item.sid===S.sid&&item.sh===S.sh&&S.hoff&&Date.now()-S.hoff<864e5){
+  const msg=String(q.error&&q.error.message||'').trim();
+  const sameHost=item.sid===S.sid&&item.sh===S.sh&&!S.ho;
+  const recentHandoff=!!S.hoff&&Date.now()-S.hoff<864e5;
+  // A handoff intentionally invalidates the old host key. Preserve the existing
+  // demotion behavior before considering recovery from a genuinely expired session.
+  if(q.error&&/Invalid host key|expired session/i.test(msg)&&sameHost&&recentHandoff){
     const oldSid=item.sid,oldSh=item.sh;
     S.hoff=0;S.ho=true;S.sid='';S.sh='';
     dropPublishQueue(oldSid,oldSh);persistStateOnly();
+    return q
+  }
+  // The RPC folds a valid-but-expired session and an invalid host key into the same
+  // message. Outside a recent handoff, recover a queued state publish by rotating
+  // the identity; never reuse the expired code or host key.
+  if(q.error&&/^(?:Invalid host key or expired session\.?|expired session\.?)$/i.test(msg)&&
+     !item.rid&&item.kind==='state'&&sameHost){
+    const oldSid=item.sid,oldSh=item.sh,nid=randLiveCode(),nkey=randHostKey();
+    S.sid=nid;S.sh=nkey;S.hoff=0;S.rid='';S.rr=false;S.lr=false;
+    PQ.forEach(x=>{
+      if(x.kind==='state'&&x.sid===oldSid&&x.sh===oldSh){x.sid=nid;x.sh=nkey}
+    });
+    item.sid=nid;item.sh=nkey;
+    persistStateOnly();savePublishQueue();
+    q=await sb.rpc('publish_pickle_session',{p_code:item.sid,p_host_key:item.sh,p_payload:item.payload});
+    if(!q.error)toast('The previous Live View expired. A new link is ready to share.','info')
   }
   return q
 }
@@ -480,7 +490,7 @@ async function flushPublishQueue(){
   }
 }
 function push(){}
-const mk=()=>({queue:[],waiting:[],rest:{},log:[],target:11,lv:{},md:'bal',sd:0,gp:{},wt:{},ws:false,wl:2,eq:false,tts:false,hap:true,rr:false,lr:false,lpf:false,rpf:false,courts:[1,2,3,4].map(id=>({id,name:'Court '+id,isActive:false,players:[],score:[0,0],mid:'',t:0}))});
+const mk=()=>({queue:[],waiting:[],rest:{},log:[],target:11,lv:{},md:'bal',sd:0,gp:{},wt:{},liveSeq:0,ws:false,wl:2,eq:false,tts:false,hap:true,rr:false,lr:false,lpf:false,rpf:false,courts:[1,2,3,4].map(id=>({id,name:'Court '+id,isActive:false,players:[],score:[0,0],mid:'',t:0}))});
 let S=mk(),V=null,SV=null,RA=null;
 const esc=s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const num=v=>{if(typeof v!=='number'&&typeof v!=='string')return 0;const n=Number(v);return Number.isFinite(n)?n:0};
@@ -501,8 +511,10 @@ function normalizeWaitTimes(queue,raw){
 function markWaiting(players,at=Date.now()){S.wt=S.wt||{};players.forEach(p=>{S.wt[wk(p)]=at})}
 function clearWaiting(players){if(!S.wt)return;players.forEach(p=>delete S.wt[wk(p)])}
 
-function load(){try{const raw=localStorage.getItem(K),s=JSON.parse(raw);if(s&&s.courts){S=s;S.log=S.log||[];S.waiting=S.waiting||[];S.rest=S.rest||{};S.target=S.target||11;S.lv=S.lv||{};S.md=S.md||'bal';S.sd=S.sd||0;S.gp=S.gp||{};S.wt=normalizeWaitTimes(S.queue||[],S.wt);S.ws=!!S.ws;S.eq=!!S.eq;S.tts=!!S.tts;S.wl=S.wl==null?2:S.wl;S.rr=!!S.rr;S.lr=!!S.lr;S.lpf=!!S.lpf;S.rpf=!!S.rpf;if(s.ended&&s.rid&&!Object.prototype.hasOwnProperty.call(s,'rr'))S.lr=true;S.courts.forEach(c=>{c.score=c.score||[0,0]})}}catch(e){}}
-function save(){try{localStorage.setItem(K,JSON.stringify(S));storageWriteSucceeded('state')}catch(e){storageWriteFailed('state')}pushS()}
+function readStoredLiveSequence(){try{const saved=JSON.parse(localStorage.getItem(K)||'null');return saved&&Number.isSafeInteger(saved.liveSeq)&&saved.liveSeq>=0?saved.liveSeq:0}catch(e){return 0}}
+function resumeLiveSequence(){S.liveSeq=Math.max(Number.isSafeInteger(S.liveSeq)&&S.liveSeq>=0?S.liveSeq:0,readStoredLiveSequence(),Date.now());return S.liveSeq}
+function load(){try{const raw=localStorage.getItem(K),s=JSON.parse(raw);if(s&&s.courts){S=s;S.log=S.log||[];S.waiting=S.waiting||[];S.rest=S.rest||{};S.target=S.target||11;S.lv=S.lv||{};S.md=S.md||'bal';S.sd=S.sd||0;S.gp=S.gp||{};resumeLiveSequence();S.wt=normalizeWaitTimes(S.queue||[],S.wt);S.ws=!!S.ws;S.eq=!!S.eq;S.tts=!!S.tts;S.wl=S.wl==null?2:S.wl;S.rr=!!S.rr;S.lr=!!S.lr;S.lpf=!!S.lpf;S.rpf=!!S.rpf;if(s.ended&&s.rid&&!Object.prototype.hasOwnProperty.call(s,'rr'))S.lr=true;S.courts.forEach(c=>{c.score=c.score||[0,0]})}}catch(e){}}
+function save(){S.liveSeq=Math.max(Number.isSafeInteger(S.liveSeq)&&S.liveSeq>=0?S.liveSeq:0,readStoredLiveSequence());try{localStorage.setItem(K,JSON.stringify(S));storageWriteSucceeded('state')}catch(e){storageWriteFailed('state')}pushS()}
 
 function toast(m,type){const d=document.createElement('div');
 d.className='mb border px-4 py-3 rounded-lg shadow-xl pointer-events-auto text-sm font-medium '+(type=='error'?'bg-red-500/90 border-red-400':type=='success'?'bg-pickle-500/90 border-pickle-400 text-dark-900':'bg-dark-700/90 border-dark-700');
@@ -547,7 +559,7 @@ async function live(){
   if(!sb)return toast('Live View needs Supabase.','error');
   ensureLiveIdentity();
   await flushPublishQueue();
-  const q=await publishSession(sdata());
+  const q=await publishSession(await sdata());
   if(q.error)return toast('Publish failed: '+q.error.message,'error');
   dropPublishQueue(S.sid,S.sh);
   save();const url=location.origin+location.pathname+'#s='+S.sid;
@@ -700,7 +712,7 @@ function downloadBackup(note,filename){
 function cleanState(o){
   const s=o&&o.state&&typeof o.state==='object'?o.state:o;
   if(!s||!Array.isArray(s.courts))throw new Error('Not a valid QueueZeroTwo backup');
-  const R=mk();
+  const R=mk();R.liveSeq=Math.max(Number.isSafeInteger(s.liveSeq)&&s.liveSeq>=0?s.liveSeq:0,Date.now());
   R.name=String(s.name||'').slice(0,40);
   R.queue=Array.isArray(s.queue)?s.queue.slice(0,5000).map(x=>String(x).trim().slice(0,40)).filter(Boolean):[];
   R.waiting=Array.isArray(s.waiting)?s.waiting.slice(0,5000).map(x=>String(x).trim().slice(0,40)).filter(Boolean):[];
@@ -728,7 +740,7 @@ $('imp').onchange=async e=>{
   try{
     const o=JSON.parse(await f.text()),R=cleanState(o);
     ask('Restore backup?','This replaces the current local session and discards any unsent Live View updates for it. Export a backup first if you need those changes. Live View control data is not included; a new session identity will be created on publish.',()=>{
-      S=R;S.ho=false;S.hoff=0;S.sid='';S.sh='';S.rid='';clearPublishQueue();save();render();toast('Backup restored','success')
+      S=R;S.ho=false;S.hoff=0;S.sid='';S.sh='';S.rid='';resumeLiveSequence();clearPublishQueue();save();render();toast('Backup restored','success')
     })
   }catch(err){toast('Not a valid QueueZeroTwo backup','error')}
 };
@@ -963,7 +975,29 @@ function resultsSnapshot(){
   const matches=logged.map(l=>({c:String(l.c||'').slice(0,20),p:l.p.slice(0,4).map(n=>safePlayerName(n,dm)),s:l.s.slice(0,2).map(v=>Math.max(0,Number(v)||0)),w:Number(l.w),tg:Number(l.tg)||S.target,t:Number(l.t)||0,d:Number(l.d)||0}));
   return {v:1,name:String(S.name||'').slice(0,40),totals:{players:leaderboard.length,games:S.log.length,courts:S.courts.length,playTo:S.target,winBy:S.wb===1?1:2},leaderboard,matches}
 }
-function sdata(){const q=S.queue,upm=buildUpNext(q),tm=timingMeta();return{t:S.target,wb:S.wb,courts:S.courts.map(c=>({n:c.name,a:c.isActive,p:c.players,s:c.score})),nx:upm.nx,up:upm.up,tm,q:q,lb:stats().slice(0,20)}}
+function buildLiveSessionData(){
+ resumeLiveSequence();
+ S.liveSeq++;
+ persistStateOnly();
+ const seq=S.liveSeq,q=S.queue,upm=buildUpNext(q),tm=timingMeta();
+ return{seq,t:S.target,wb:S.wb,courts:S.courts.map(c=>({n:c.name,a:c.isActive,p:c.players,s:c.score})),nx:upm.nx,up:upm.up,tm,q,lb:stats().slice(0,20)}
+}
+async function sdata(){
+ const lockName='queuezerotwo-live-seq-'+String(S.sid||'local');
+ if(!navigator.locks||typeof navigator.locks.request!=='function')return buildLiveSessionData();
+ let callbackStarted=false;
+ try{
+  return await navigator.locks.request(lockName,()=>{
+   callbackStarted=true;
+   return buildLiveSessionData()
+  })
+ }catch(error){
+  // Fall back only when Web Locks rejects before invoking the callback.
+  // Never rerun a build that has already incremented and persisted seq.
+  if(callbackStarted||error?.name!=='SecurityError')throw error;
+  return buildLiveSessionData()
+ }
+}
 const LIVE_ALPH='ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
 const randResultCode=()=>{const a=new Uint8Array(10);crypto.getRandomValues(a);return Array.from(a,v=>LIVE_ALPH[v%LIVE_ALPH.length]).join('')};
 const randLiveCode=()=>{const a=new Uint8Array(10);crypto.getRandomValues(a);return Array.from(a,v=>LIVE_ALPH[v%LIVE_ALPH.length]).join('')};
@@ -971,11 +1005,69 @@ const randHostKey=()=>{const a=new Uint8Array(32);crypto.getRandomValues(a);retu
 function ensureLiveIdentity(){if(!S.sid||!S.sh){S.sid=randLiveCode();S.sh=randHostKey()}}
 async function publishSession(payload){if(!sb)return {error:new Error('Supabase unavailable')};ensureLiveIdentity();let q=await sb.rpc('publish_pickle_session',{p_code:S.sid,p_host_key:S.sh,p_payload:payload});if(q.error&&S.hoff&&Date.now()-S.hoff<864e5&&/Invalid host key/i.test(q.error.message||'')){S.hoff=0;S.ho=true;S.sid='';S.sh='';toast('Live View host moved to another device.','info');return {error:new Error('handed off')}}
 if(q.error&&/Invalid host key|expired session/i.test(q.error.message||'')){S.sid=randLiveCode();S.sh=randHostKey();q=await sb.rpc('publish_pickle_session',{p_code:S.sid,p_host_key:S.sh,p_payload:payload})}return q}
-let st;function pushS(){if(!sb||S.ended||S.ho)return;ensureLiveIdentity();clearTimeout(st);st=setTimeout(()=>queuePublishPayload(sdata(),S.sid,S.sh,'state'),400)}
-function applyLiveSessionBroadcast(q){const p=q&&q.payload||{};if(!p.data)return false;SV.d=p.data;SV.ts=Date.parse(p.updated_at);render();return true}
+let st;function pushS(){if(!sb||S.ended||S.ho)return;ensureLiveIdentity();clearTimeout(st);st=setTimeout(async()=>queuePublishPayload(await sdata(),S.sid,S.sh,'state'),400)}
+function normalizeLiveSessionPayload(data){
+ if(!data||typeof data!=='object'||Array.isArray(data))return null;
+ let raw;
+ try{raw=JSON.stringify(data);if(typeof raw!=='string'||new TextEncoder().encode(raw).length>200000)return null}catch(e){return null}
+ if(Object.prototype.hasOwnProperty.call(data,'seq')&&(!Number.isSafeInteger(data.seq)||data.seq<0))return null;
+ const txt=(v,max)=>typeof v==='string'?v.slice(0,max):v==null?'':String(v).slice(0,max);
+ const strings=(v,count,max)=>Array.isArray(v)?v.slice(0,count).map(x=>txt(x,max)):[];
+ const n=v=>Math.max(-1000000,Math.min(1000000,num(v)));
+ const courts=Array.isArray(data.courts)?data.courts.slice(0,32).filter(c=>c&&typeof c==='object'&&!Array.isArray(c)).map(c=>{
+  const scores=Array.isArray(c.s)?c.s:[];
+  return {n:txt(c.n||'Court',40)||'Court',a:c.a===true,p:strings(c.p,4,40),s:[n(scores[0]),n(scores[1])]}
+ }):[];
+ const up=Array.isArray(data.up)?data.up.slice(0,200).filter(x=>x&&typeof x==='object'&&!Array.isArray(x)).map(x=>({n:txt(x.n,40),p:n(x.p)})):[];
+ const lb=Array.isArray(data.lb)?data.lb.slice(0,200).filter(x=>x&&typeof x==='object'&&!Array.isArray(x)).map(x=>({n:txt(x.n,40),w:n(x.w),l:n(x.l),d:n(x.d)})):[];
+ const normalized={
+  t:Math.max(1,Math.min(99,n(data.t)||11)),
+  wb:n(data.wb)===1?1:2,
+  courts,
+  nx:strings(data.nx,800,40),
+  up,
+  tm:data.tm&&typeof data.tm==='object'&&!Array.isArray(data.tm)?{a:n(data.tm.a)}:null,
+  q:strings(data.q,5000,40),
+  lb
+ };
+ if(Number.isSafeInteger(data.seq))normalized.seq=data.seq;
+ return normalized
+}
+function applyLiveSessionData(data,updatedAt){
+ if(!SV)return false;
+ const normalized=normalizeLiveSessionPayload(data);
+ if(!normalized){SV.warning='A Live View update was rejected. Showing the last valid update.';render();return false}
+ const nextSeq=Number.isSafeInteger(normalized.seq)?normalized.seq:null;
+ const currentSeq=SV.d&&Number.isSafeInteger(SV.d.seq)?SV.d.seq:null;
+ const nextTs=Date.parse(updatedAt||'');
+ if(SV.d){
+  if(currentSeq!==null){
+   if(nextSeq===null||nextSeq<=currentSeq)return false
+  }else if(nextSeq===null&&Number.isFinite(SV.ts)&&Number.isFinite(nextTs)&&nextTs<SV.ts)return false
+ }
+ SV.d=normalized;
+ SV.warning='';
+ if(Number.isFinite(nextTs))SV.ts=nextTs;
+ SV.missing=false;
+ render();
+ return true
+}
+function applyLiveSessionBroadcast(q){
+ const p=q&&q.payload||{};
+ if(!SV||p.code!==SV.code||!p.data)return false;
+ if(window.__Q2_TEST_BROADCAST_DIAGNOSTICS__===true){
+  const received=SV.receivedBroadcastSeqs||(SV.receivedBroadcastSeqs=[]);
+  received.push(Number.isSafeInteger(p.data.seq)?p.data.seq:null);
+  if(received.length>100)received.splice(0,received.length-100)
+ }
+ const accepted=applyLiveSessionData(p.data,p.updated_at);
+ if(accepted&&Number.isSafeInteger(SV.d.seq)){SV.lastBroadcastSeq=SV.d.seq;SV.lastBroadcastAt=Date.now()}
+ return accepted
+}
 function renderSession(){
 const d=SV.d;
-if(!d){$('viewer').innerHTML='<div class="bg-dark-800 border border-dark-700 rounded-2xl p-8 text-center"><div class="text-blue-300 text-sm font-semibold mb-2">LIVE VIEW</div><p class="text-gray-400 text-sm">'+(SV.missing?'This Live View link is no longer active. The host may have ended the session or started a new one. Ask them for the current QR code.':'Connecting to the shared session…')+'</p><p class="text-xs text-gray-400 mt-2">'+(SV.missing?'Ask the organizer for a new Live View link.':'Your screen will update automatically once connected.')+'</p></div>';return}
+const warning=SV.warning?'<div role="status" class="mb-3 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-200">'+esc(SV.warning)+'</div>':'';
+if(!d){$('viewer').innerHTML=warning+'<div class="bg-dark-800 border border-dark-700 rounded-2xl p-8 text-center"><div class="text-blue-300 text-sm font-semibold mb-2">LIVE VIEW</div><p class="text-gray-400 text-sm">'+(SV.missing?'This Live View link is no longer active. The host may have ended the session or started a new one. Ask them for the current QR code.':'Connecting to the shared session…')+'</p><p class="text-xs text-gray-400 mt-2">'+(SV.missing?'Ask the organizer for a new Live View link.':'Your screen will update automatically once connected.')+'</p></div>';return}
 if(d.e)return renderResults(d);
 const courtsData=Array.isArray(d.courts)?d.courts.filter(c=>c&&typeof c==='object'&&!Array.isArray(c)):[];
 const queueData=Array.isArray(d.q)?d.q:[];
@@ -996,7 +1088,7 @@ const nx=upData.length?'<div class="grid grid-cols-2 gap-3 text-sm"><div class="
 const lb=lbData.length?'<table class="w-full text-sm text-center"><thead class="text-xs text-gray-400"><tr><th class="text-left p-2">#</th><th class="text-left">Player</th><th>W-L</th><th>+/-</th></tr></thead><tbody class="divide-y divide-dark-700">'+lbData.map((x,i)=>{x=x&&typeof x==='object'?x:{};const w=num(x.w),l=num(x.l),diff=num(x.d);return '<tr><td class="text-left p-2 text-gray-400">'+(i+1)+'</td><td class="text-left">'+esc(player(x.n))+'</td><td>'+w+'-'+l+'</td><td class="'+(diff>0?'text-green-400':diff<0?'text-red-400':'')+'">'+(diff>0?'+':'')+diff+'</td></tr>'}).join('')+'</tbody></table>':'<p class="text-sm text-gray-400 p-4 text-center">No scored matches yet.</p>';
 const stack=queueData.length?queueData.map((p,i)=>'<div class="flex items-center gap-2 py-0.5"><span class="text-[11px] text-gray-400 w-7 flex-none">#'+(i+1)+'</span><span class="truncate">'+esc(player(p))+'</span><span class="text-[11px] text-gray-500 ml-auto flex-none">'+etaText(i+1,d.tm&&typeof d.tm==='object'?d.tm:null)+'</span></div>').join(''):'Empty';
 const note=d.tm&&typeof d.tm==='object'&&num(d.tm.a)>0?'Wait estimates are rough and based on recent finished games.':'Positions are live queue positions.';
-$('viewer').innerHTML='<div class="flex justify-between items-center mb-4"><div><h2 class="text-2xl text-white">Live Session</h2><p class="text-xs text-gray-400">'+note+'</p></div><span class="text-xs font-bold rounded-full px-2 py-1 '+(SV.status=='SUBSCRIBED'?'text-green-300 bg-green-500/10':'text-blue-300 bg-blue-500/10')+'">'+(SV.status=='SUBSCRIBED'?'LIVE · CONNECTED':'CONNECTING')+'</span></div><div class="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-6">'+courts+'</div><h3 class="text-xl text-white mb-2">Up Next</h3><div class="mb-6">'+nx+'</div><h3 class="text-xl text-white mb-2">The Stack ('+queueData.length+')</h3><div class="bg-dark-800 border border-dark-700 rounded-2xl p-4 mb-6 max-h-80 overflow-y-auto">'+stack+'</div><h3 class="text-xl text-white mb-2">Leaderboard</h3><div class="bg-dark-800 border border-dark-700 rounded-2xl overflow-x-auto">'+lb+'</div>'
+$('viewer').innerHTML=warning+'<div class="flex justify-between items-center mb-4"><div><h2 class="text-2xl text-white">Live Session</h2><p class="text-xs text-gray-400">'+note+'</p></div><span class="text-xs font-bold rounded-full px-2 py-1 '+(SV.status=='SUBSCRIBED'?'text-green-300 bg-green-500/10':'text-blue-300 bg-blue-500/10')+'">'+(SV.status=='SUBSCRIBED'?'LIVE · CONNECTED':'CONNECTING')+'</span></div><div class="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-6">'+courts+'</div><h3 class="text-xl text-white mb-2">Up Next</h3><div class="mb-6">'+nx+'</div><h3 class="text-xl text-white mb-2">The Stack ('+queueData.length+')</h3><div class="bg-dark-800 border border-dark-700 rounded-2xl p-4 mb-6 max-h-80 overflow-y-auto">'+stack+'</div><h3 class="text-xl text-white mb-2">Leaderboard</h3><div class="bg-dark-800 border border-dark-700 rounded-2xl overflow-x-auto">'+lb+'</div>'
 }
 function renderArchivedResults(){
   if(!RA.d){$('viewer').innerHTML='<div class="bg-dark-800 border border-dark-700 rounded-2xl p-8 text-center"><div class="text-pickle-500 text-sm font-semibold mb-2">SESSION RESULTS</div><p class="text-gray-400 text-sm">'+(RA.missing?'This results link has expired or is no longer available.':'Loading saved results…')+'</p><a href="'+location.pathname+'" class="inline-block mt-4 text-sm text-pickle-500 underline">Open QueueZeroTwo</a></div>';return}
@@ -1099,12 +1191,64 @@ if(false){const ap=q=>{V={...V,n:q.court,p:q.players,s:q.score,tg:q.target,fin:q
 sb.from('live_matches').select('*').eq('code',V.m).maybeSingle().then(q=>q.data&&ap(q.data));
 sb.channel('m'+V.m).on('postgres_changes',{event:'*',schema:'public',table:'live_matches',filter:'code=eq.'+V.m},q=>q.new&&ap(q.new)).subscribe()}if(location.hash.startsWith('#r=')){RA={code:location.hash.slice(3),d:null,ts:Date.now(),status:'CONNECTING'};$('app').classList.add('hidden');$('viewer').classList.remove('hidden','max-w-xl');$('nav').classList.add('hidden');$('viewer').classList.add('max-w-3xl');
 if(sb){const rv=resultsViewerClient(RA.code),ap=q=>{RA.d=q.data;RA.expires=q.expires_at;RA.ts=Date.parse(q.created_at);render()};rv.from('pickle_results').select('data,created_at,expires_at').eq('code',RA.code).maybeSingle().then(q=>{if(q.data)ap(q.data);else{RA.missing=true;render()}}).catch(()=>{RA.missing=true;render()})}else{RA.missing=true}}if(location.hash.startsWith('#s=')){SV={code:location.hash.slice(3),d:null,ts:Date.now(),status:'CONNECTING'};$('app').classList.add('hidden');$('viewer').classList.remove('hidden','max-w-xl');$('nav').classList.add('hidden');$('viewer').classList.add('max-w-3xl');
-if(sb){const sv=viewerClient(SV.code),ap=q=>{SV.d=q.data;SV.ts=Date.parse(q.updated_at);render()};
-sv.from('live_sessions').select('code,data,updated_at,expires_at').eq('code',SV.code).maybeSingle().then(q=>{if(q.data)ap(q.data);else{SV.missing=true;render()}});
-const ch=sv.channel('session:'+SV.code,{config:{private:true}});
-ch.on('broadcast',{event:'session_update'},applyLiveSessionBroadcast);
-ch.subscribe((status)=>{SV.status=status||'CONNECTING';render()})}}
+if(sb){
+ const sv=viewerClient(SV.code),liveCode=SV.code;
+ let viewerChannel=null,viewerGeneration=0,viewerRetryTimer=null,viewerRetryDelay=1000;
+ const loadSnapshot=()=>{sv.from('live_sessions').select('code,data,updated_at,expires_at').eq('code',liveCode).maybeSingle().then(q=>{
+  if(!SV||SV.code!==liveCode)return;
+  if(q.data)applyLiveSessionData(q.data.data,q.data.updated_at);
+  else if(!SV.d){SV.missing=true;render()}
+ }).catch(()=>{if(SV&&SV.code===liveCode&&!SV.d){SV.missing=true;render()}})};
+ const scheduleReconnect=()=>{
+  if(!SV||SV.code!==liveCode||!navigator.onLine||viewerRetryTimer)return;
+  const delay=viewerRetryDelay;
+  viewerRetryDelay=Math.min(10000,viewerRetryDelay*2);
+  viewerRetryTimer=setTimeout(()=>{viewerRetryTimer=null;connectViewer()},delay)
+ };
+ const connectViewer=()=>{
+  if(!SV||SV.code!==liveCode)return;
+  if(viewerRetryTimer){clearTimeout(viewerRetryTimer);viewerRetryTimer=null}
+  const old=viewerChannel;viewerChannel=null;
+  const generation=++viewerGeneration;
+  SV.status='CONNECTING';render();
+  const open=()=>{
+   if(generation!==viewerGeneration||!SV||SV.code!==liveCode)return;
+   const ch=sv.channel('session:'+liveCode,{config:{private:true}});
+   viewerChannel=ch;
+   ch.on('broadcast',{event:'session_update'},q=>{
+    if(generation===viewerGeneration&&SV&&SV.code===liveCode)applyLiveSessionBroadcast(q)
+   });
+   ch.subscribe(status=>{
+    if(generation!==viewerGeneration||!SV||SV.code!==liveCode)return;
+    SV.status=status||'CONNECTING';render();
+    if(status==='SUBSCRIBED'){
+     viewerRetryDelay=1000;
+     loadSnapshot()
+    }else if(['CLOSED','CHANNEL_ERROR','TIMED_OUT'].includes(status))scheduleReconnect()
+   })
+  };
+  if(old){
+   try{Promise.resolve(sv.removeChannel(old)).then(open).catch(open)}catch(e){open()}
+  }else open()
+ };
+ connectViewer();
+ document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible')connectViewer()});
+ addEventListener('online',connectViewer);
+ addEventListener('offline',()=>{if(SV&&SV.code===liveCode){SV.status='OFFLINE';render()}})
+}
+}
 
+function resumeHostStateOnStartup(navigationEntry=performance.getEntriesByType?.('navigation')?.[0]){
+ // Only a reload can discard an in-memory debounce timer. A newly opened host
+ // tab must not auto-publish a duplicate snapshot that can race another tab.
+ if(navigationEntry&&navigationEntry.type!=='reload')return false;
+ if(V||SV||RA||location.hash.startsWith('#h=')||!S.sid||!S.sh||S.ended||S.ho)return false;
+ pushS();
+ return true
+}
+// A host can be closed during the 400ms debounce. Re-publish its persisted
+// state after reload so viewers do not wait for the next score change.
+resumeHostStateOnStartup();
 render();
 if(V||SV||RA)$('faq').remove();
 takeover();
