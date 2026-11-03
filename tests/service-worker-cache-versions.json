@@ -5,10 +5,11 @@
     62,
     63,
     65,
-    66
+    66,
+    67
   ],
-  "currentBranch": "feature/player-rotation-fairness",
-  "currentCache": "queuezerotwo-v34",
+  "currentBranch": "feature/session-fairness-trends",
+  "currentCache": "queuezerotwo-v35",
   "allocations": [
     {
       "cache": "queuezerotwo-v1",
@@ -185,9 +186,16 @@
     },
     {
       "cache": "queuezerotwo-v34",
-      "status": "reserved",
+      "status": "released",
       "pr": 66,
-      "branch": "feature/player-rotation-fairness"
+      "branch": "feature/player-rotation-fairness",
+      "merge_commit_sha": "ba3a3102657965ae9fb60aa4d5eca802e9953e46"
+    },
+    {
+      "cache": "queuezerotwo-v35",
+      "status": "reserved",
+      "pr": 67,
+      "branch": "feature/session-fairness-trends"
     }
   ]
 }
