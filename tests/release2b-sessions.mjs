@@ -78,12 +78,12 @@ async function setupFour(page) {
   assert.equal(await page.locator('#qc').innerText(), '4');
 }
 
-async function simulateOldCacheToV31(browser,oldVersion) {
+async function simulateOldCacheToV32(browser,oldVersion) {
   const context = await browser.newContext({...devices['Desktop Chrome'],serviceWorkers:'allow',locale:'en-US'});
   const page = await context.newPage();
   let swFetch = 0;
   const currentSw = fs.readFileSync(path.resolve('sw.js'), 'utf8');
-  assert.match(currentSw,/queuezerotwo-v31/);
+  assert.match(currentSw,/queuezerotwo-v32/);
   const oldSw = `const V='queuezerotwo-v${oldVersion}';self.addEventListener('install',e=>e.waitUntil(caches.open(V).then(c=>c.put('/__queuezerotwo_v${oldVersion}_sentinel__',new Response('v${oldVersion}'))).then(()=>self.skipWaiting())));self.addEventListener('activate',e=>e.waitUntil(self.clients.claim()));`;
   await context.route('**/sw.js', async route => {
     swFetch++;
@@ -101,7 +101,7 @@ async function simulateOldCacheToV31(browser,oldVersion) {
   await page.evaluate(async()=>{const r=await navigator.serviceWorker.getRegistration();await r.update()});
   await page.waitForFunction(async()=>{
     const r=await navigator.serviceWorker.getRegistration();
-    return !!r?.waiting || await caches.has('queuezerotwo-v31');
+    return !!r?.waiting || await caches.has('queuezerotwo-v32');
   },null,{timeout:10000});
   await page.evaluate(async()=>{
     const r=await navigator.serviceWorker.getRegistration();
@@ -109,7 +109,7 @@ async function simulateOldCacheToV31(browser,oldVersion) {
   });
   await page.waitForFunction(async()=>{
     const r=await navigator.serviceWorker.getRegistration();
-    return !!r && !r.waiting && r.active?.state==='activated' && await caches.has('queuezerotwo-v31');
+    return !!r && !r.waiting && r.active?.state==='activated' && await caches.has('queuezerotwo-v32');
   },null,{timeout:10000});
   // The aborted Supabase request must settle before the startup-resume timer
   // fires, leaving one pending state item for queue coalescing to replace.
@@ -119,7 +119,7 @@ async function simulateOldCacheToV31(browser,oldVersion) {
     return q.length===1&&Number.isSafeInteger(q[0]?.payload?.seq);
   },null,{timeout:5000});
   const out=await page.evaluate(async(oldVersion)=>{
-    const cache=await caches.open('queuezerotwo-v31');
+    const cache=await caches.open('queuezerotwo-v32');
     return {
       queue:JSON.parse(localStorage.getItem('queuezerotwo-publish-queue-v1')||'{"items":[]}').items,
       state:JSON.parse(localStorage.getItem('pickleStackState')||'{}'),
@@ -138,61 +138,314 @@ async function simulateOldCacheToV31(browser,oldVersion) {
   assert.equal(out.state.sid,'PERSISTEDSID');
   await context.close();
 }
-async function simulateV25ToV31(browser){return simulateOldCacheToV31(browser,25)}
-async function simulateV26ToV31(browser){return simulateOldCacheToV31(browser,26)}
-async function simulateV29ToV31(browser){return simulateOldCacheToV31(browser,29)}
-async function simulateV30ToV31(browser){return simulateOldCacheToV31(browser,30)}
 
-async function simulateV29ToV30(browser) {
-  const context = await browser.newContext({...devices['Desktop Chrome'],serviceWorkers:'allow',locale:'en-US'});
-  const page = await context.newPage();
-  let swFetch = 0;
-  const currentSw = fs.readFileSync(path.resolve('sw.js'), 'utf8');
-  assert.match(currentSw,/queuezerotwo-v30/);
-  const oldV29 = `const V='queuezerotwo-v29';self.addEventListener('install',e=>e.waitUntil(caches.open(V).then(c=>c.put('/__queuezerotwo_v29_sentinel__',new Response('v29'))).then(()=>self.skipWaiting())));self.addEventListener('activate',e=>e.waitUntil(self.clients.claim()));`;
-  await context.route('**/sw.js', async route => {
-    swFetch++;
-    await route.fulfill({status:200,contentType:'application/javascript',body:swFetch===1?oldV29:currentSw});
-  });
-  await page.goto(APP,{waitUntil:'networkidle'});
-  await page.waitForFunction(()=>!!navigator.serviceWorker?.controller,null,{timeout:5000});
-  await page.evaluate(()=>{
-    localStorage.setItem('pickleStackState',JSON.stringify({courts:[{id:1,name:'Court 1',isActive:false,players:[],score:[0,0],mid:'',t:0}],queue:['Persisted player'],waiting:[],rest:{},log:[],target:11,lv:{},md:'bal',sd:0,gp:{},wt:{},ws:false,wl:2,eq:false,tts:false,hap:true,sid:'PERSISTEDSID',sh:'a'.repeat(64)}));
-    localStorage.setItem('queuezerotwo-publish-queue-v1',JSON.stringify({v:1,seq:1,items:[{seq:1,sid:'PERSISTEDSID',sh:'a'.repeat(64),kind:'state',attempts:0,lastError:'',payload:{t:11,q:['Persisted player'],courts:[],nx:[],lb:[]}}]}));
-  });
-  await page.evaluate(async()=>{const r=await navigator.serviceWorker.getRegistration();await r.update()});
-  await page.waitForFunction(async()=>{
-    const r=await navigator.serviceWorker.getRegistration();
-    return !!r?.waiting || await caches.has('queuezerotwo-v30');
-  },null,{timeout:10000});
-  await page.evaluate(async()=>{
-    const r=await navigator.serviceWorker.getRegistration();
-    if(r?.waiting)r.waiting.postMessage('SKIP_WAITING');
-  });
-  await page.waitForFunction(async()=>{
-    const r=await navigator.serviceWorker.getRegistration();
-    return !!r && !r.waiting && r.active?.state==='activated' && await caches.has('queuezerotwo-v30');
-  },null,{timeout:10000});
-  await page.reload({waitUntil:'networkidle'});
-  const out=await page.evaluate(async()=>{
-    const cache=await caches.open('queuezerotwo-v30');
-    return {
-      queue:JSON.parse(localStorage.getItem('queuezerotwo-publish-queue-v1')||'{"items":[]}').items,
-      state:JSON.parse(localStorage.getItem('pickleStackState')||'{}'),
-      oldCache:await caches.has('queuezerotwo-v29'),
-      profilesCached:!!(await cache.match('/profiles.js'))
-    };
-  });
-  assert.equal(out.oldCache,false);
-  assert.equal(out.profilesCached,true,'profiles.js is present in the offline shell cache');
-  assert.equal(out.queue.length,1);
-  assert.equal(out.queue[0].sid,'PERSISTEDSID');
-  assert.match(out.queue[0].id,/^[0-9a-f]{32}$/);
-  assert.equal(out.state.queue[0],'Persisted player');
-  assert.equal(out.state.sid,'PERSISTEDSID');
-  await context.close();
+async function earlyFinishWinnerPromptRegression(browser) {
+  const context=await freshContext(browser,devices['Desktop Chrome']);
+  const page=await context.newPage();
+  const seed=async(score,options={})=>page.evaluate(({score,options})=>{
+    pushS=()=>{};
+    S=mk();
+    S.queue=(options.queue||[]).slice();
+    S.log=[];
+    S.ws=!!options.ws;
+    S.wl=2;
+    S.target=11;
+    S.wb=2;
+    S.wt={};
+    S.gp={};
+    Object.assign(S.courts[0],{
+      id:1,name:'Court 1',isActive:true,
+      players:['Alpha','Beta','Gamma','Delta'],
+      score:score.slice(),mid:'EARLYFIN1',t:Date.now()-60000,
+      hold:null,stk:0
+    });
+    render();
+  },{score,options});
+  const openPrompt=async()=>{
+    await page.locator('#courts button[onclick="fin(1)"]').click();
+    const d=page.locator('[role="dialog"]');
+    await d.waitFor({state:'visible',timeout:3000});
+    await page.waitForFunction(()=>!!document.activeElement?.closest('[role="dialog"]'),null,{timeout:3000});
+    assert.match(await d.innerText(),/Who won\?/i);
+    return d;
+  };
+  try {
+    await page.goto(APP,{waitUntil:'networkidle'});
+    await page.evaluate(()=>{
+      window.__earlyFinishLiveOriginalPushS=pushS;
+      window.__earlyFinishLiveOriginalRpc=sb.rpc.bind(sb);
+    });
+
+    await seed([1,0]);
+    let dialog=await openPrompt();
+    assert.match(await dialog.innerText(),/Court 1 · 1-0/i);
+    assert.match(await dialog.locator('[data-w="0"]').innerText(),/Team 1/i);
+    assert.match(await dialog.locator('[data-w="1"]').innerText(),/Team 2/i);
+    assert.match(await dialog.locator('[data-w="0"]').getAttribute('class'),/bg-pickle-500/,
+      'The team leading on the scoreboard is visually highlighted');
+    await dialog.locator('[data-w="0"]').click();
+    await dialog.waitFor({state:'detached'});
+    let result=await page.evaluate(()=>({
+      winner:S.log[0]?.w,score:S.log[0]?.s,active:S.courts[0].isActive,
+      wins:stats().filter(x=>x.w>0).map(x=>x.n).sort(),queue:S.queue.slice()
+    }));
+    assert.equal(result.winner,0);
+    assert.deepEqual(result.score,[1,0]);
+    assert.equal(result.active,false);
+    assert.deepEqual(result.wins,['Alpha','Beta']);
+    assert.deepEqual(result.queue,['Alpha','Beta','Gamma','Delta']);
+
+    // A chosen winner may contradict the score, for example after a forfeit.
+    await seed([1,0]);
+    dialog=await openPrompt();
+    await dialog.locator('[data-w="1"]').click();
+    await dialog.waitFor({state:'detached'});
+    result=await page.evaluate(()=>({winner:S.log[0]?.w,wins:stats().filter(x=>x.w>0).map(x=>x.n).sort()}));
+    assert.equal(result.winner,1);
+    assert.deepEqual(result.wins,['Delta','Gamma']);
+
+    // Keep the historical unscored result behavior.
+    await seed([7,3]);
+    dialog=await openPrompt();
+    await dialog.locator('[data-w="-1"]').click();
+    await dialog.waitFor({state:'detached'});
+    result=await page.evaluate(()=>({winner:S.log[0]?.w,wins:stats(),active:S.courts[0].isActive}));
+    assert.equal(result.winner,-1);
+    assert.deepEqual(result.wins,[]);
+    assert.equal(result.active,false);
+
+    // Every dismissal route leaves the score active and unlogged.
+    await seed([1,0]);
+    dialog=await openPrompt();
+    await page.keyboard.press('Escape');
+    await dialog.waitFor({state:'detached'});
+    result=await page.evaluate(()=>({active:S.courts[0].isActive,log:S.log.length,score:S.courts[0].score}));
+    assert.deepEqual(result,{active:true,log:0,score:[1,0]});
+
+    await seed([1,0]);
+    dialog=await openPrompt();
+    await page.locator('body > div.fixed.inset-0').last().click({position:{x:3,y:3}});
+    await dialog.waitFor({state:'detached'});
+    result=await page.evaluate(()=>({active:S.courts[0].isActive,log:S.log.length}));
+    assert.deepEqual(result,{active:true,log:0});
+
+    await seed([1,0]);
+    dialog=await openPrompt();
+    await dialog.locator('[data-x]').click();
+    await dialog.waitFor({state:'detached'});
+    result=await page.evaluate(()=>({active:S.courts[0].isActive,log:S.log.length}));
+    assert.deepEqual(result,{active:true,log:0});
+
+    // Another path cancels the match while the winner prompt is still open.
+    // Confirming the stale prompt must close it, show a warning, and log nothing.
+    await seed([1,0]);
+    dialog=await openPrompt();
+    await page.evaluate(()=>drop(1));
+    await page.waitForFunction(()=>document.querySelectorAll('[role="dialog"]').length===2,null,{timeout:3000});
+    const cancelPrompt=await page.locator('[role="dialog"]').last().innerText();
+    assert.match(cancelPrompt,/Cancel match\?/i);
+    await page.evaluate(()=>{
+      const dialogs=[...document.querySelectorAll('[role="dialog"]')];
+      const confirm=dialogs.at(-1)?.querySelector('button.y');
+      if(!confirm)throw new Error('Cancel-match confirmation button was not rendered');
+      confirm.click();
+    });
+    await page.waitForFunction(()=>document.querySelectorAll('[role="dialog"]').length===1,null,{timeout:3000});
+    await dialog.locator('[data-w="0"]').click();
+    await dialog.waitFor({state:'detached'});
+    await page.waitForFunction(()=>document.getElementById('msg')?.innerText.includes('That match changed.'),null,{timeout:3000});
+    result=await page.evaluate(()=>({active:S.courts[0].isActive,log:S.log.length,mid:S.courts[0].mid}));
+    assert.equal(result.active,false);
+    assert.equal(result.log,0);
+    assert.equal(result.mid,'');
+
+    // A completed 11-5 match and an untouched 0-0 court do not prompt.
+    await seed([11,5]);
+    await page.locator('#courts button[onclick="fin(1)"]').click();
+    await page.waitForFunction(()=>S.log.length===1&&!S.courts[0].isActive,null,{timeout:3000});
+    assert.equal(await page.locator('[role="dialog"]').count(),0);
+    assert.equal(await page.evaluate(()=>S.log[0].w),0);
+
+    await seed([0,0]);
+    await page.locator('#courts button[onclick="fin(1)"]').click();
+    await page.waitForFunction(()=>!S.courts[0].isActive,null,{timeout:3000});
+    assert.equal(await page.locator('[role="dialog"]').count(),0);
+    result=await page.evaluate(()=>({log:S.log.length,queue:S.queue.slice()}));
+    assert.deepEqual(result,{log:0,queue:['Alpha','Beta','Gamma','Delta']});
+
+    // Winners Stay applies the selected winner even when the score disagrees.
+    await seed([1,0],{ws:true,queue:['Echo','Foxtrot','Hotel','India']});
+    dialog=await openPrompt();
+    await dialog.locator('[data-w="1"]').click();
+    await dialog.waitFor({state:'detached'});
+    result=await page.evaluate(()=>({
+      winner:S.log[0]?.w,active:S.courts[0].isActive,
+      players:S.courts[0].players.slice(),score:S.courts[0].score.slice(),
+      hold:S.courts[0].hold,queue:S.queue.slice()
+    }));
+    assert.equal(result.winner,1);
+    assert.equal(result.active,true);
+    assert.deepEqual(result.players,['Gamma','Delta','Echo','Foxtrot']);
+    assert.deepEqual(result.score,[0,0]);
+    assert.deepEqual(result.hold,['Gamma','Delta']);
+    assert.deepEqual(result.queue,['Hotel','India','Alpha','Beta']);
+
+    // The actual save path must publish a valid sdata() snapshot whose leaderboard
+    // reflects the manually selected winner, even when that choice contradicts 1-0.
+    for(const pickedWinner of [0,1]){
+      await seed([1,0]);
+      await page.evaluate(()=>{
+        window.__earlyFinishLiveCalls=[];
+        pushS=window.__earlyFinishLiveOriginalPushS;
+        S.sid='LIVEWIN01';S.sh='a'.repeat(64);S.ho=false;S.ended=false;
+        sb.rpc=async(name,args)=>{
+          if(name!=='publish_pickle_session')return {data:null,error:new Error('Unexpected RPC '+name)};
+          window.__earlyFinishLiveCalls.push({name,args});
+          return {data:true,error:null};
+        };
+      });
+      dialog=await openPrompt();
+      await dialog.locator('[data-w="'+pickedWinner+'"]').click();
+      await dialog.waitFor({state:'detached'});
+      await page.waitForFunction(()=>window.__earlyFinishLiveCalls?.length>0,null,{timeout:5000});
+      const published=await page.evaluate(()=>window.__earlyFinishLiveCalls.at(-1));
+      assert.equal(published.name,'publish_pickle_session');
+      assert.ok(published.args.p_payload&&Array.isArray(published.args.p_payload.lb));
+      assert.ok(Array.isArray(published.args.p_payload.courts));
+      assert.ok(Array.isArray(published.args.p_payload.q));
+      assert.ok(Array.isArray(published.args.p_payload.nx));
+      const publishedWinners=published.args.p_payload.lb.filter(x=>x.w===1).map(x=>x.n).sort();
+      assert.deepEqual(
+        publishedWinners,
+        pickedWinner===0?['Alpha','Beta']:['Delta','Gamma'],
+        'The Live View RPC payload leaderboard follows the winner selected in the prompt'
+      );
+      await page.evaluate(()=>{
+        sb.rpc=window.__earlyFinishLiveOriginalRpc;
+        pushS=()=>{};
+        PQ=[];PQS=0;savePublishQueue();
+      });
+    }
+
+    // A selected 1-0 winner survives export, #57 import normalization, and #r=.
+    await seed([1,0]);
+    dialog=await openPrompt();
+    await dialog.locator('[data-w="0"]').click();
+    await dialog.waitFor({state:'detached'});
+    const roundTrip=await page.evaluate(()=>{
+      const backup=JSON.parse(expData());
+      const imported=cleanState(backup);
+      const state=mk();
+      state.courts=state.courts.slice(0,1);
+      state.log=[0,1,-1,2,null,'bad','0','1','-1',true].map((winner,i)=>({
+        c:'Court '+(i+1),p:['A','B','C','D'],s:[1,0],w:winner,tg:11,t:1,d:1000
+      }));
+      const winnerSanitizer=cleanState({state}).log.map(x=>x.w);
+      imported.log.push({mid:'EARLYFIN02',c:'Court 2',p:['Eve','Finn','Gail','Hugo'],s:[1,0],w:1,tg:11,t:2,d:1000});
+      S=imported;
+      const results=resultsSnapshot();
+      return {
+        exportedWinner:backup.state.log[0]?.w,
+        importedWinner:imported.log[0]?.w,
+        importedScore:imported.log[0]?.s,
+        resultsWinner:results.matches[0]?.w,
+        resultsScore:results.matches[0]?.s,
+        resultsWinner1:results.matches[1]?.w,
+        resultsPayload:results,
+        winnerSanitizer
+      };
+    });
+    assert.equal(roundTrip.exportedWinner,0);
+    assert.equal(roundTrip.importedWinner,0);
+    assert.deepEqual(roundTrip.importedScore,[1,0]);
+    assert.equal(roundTrip.resultsWinner,0);
+    assert.deepEqual(roundTrip.resultsScore,[1,0]);
+    assert.equal(roundTrip.resultsWinner1,1);
+    assert.deepEqual(roundTrip.winnerSanitizer,[0,1,-1,-1,-1,-1,0,1,-1,-1],
+      'Backup import keeps 0, 1, -1 and normalizes every other value to -1');
+
+    const resultsContext=await freshContext(browser,devices['Desktop Chrome']);
+    try {
+      await resultsContext.route(SUPABASE+'/**',route=>{
+        const u=new URL(route.request().url());
+        if(u.pathname.endsWith('/rest/v1/pickle_results')&&route.request().method()==='GET'){
+          return route.fulfill({status:200,contentType:'application/json',body:JSON.stringify([{
+            data:roundTrip.resultsPayload,
+            created_at:new Date().toISOString(),
+            expires_at:new Date(Date.now()+30*86400000).toISOString()
+          }])});
+        }
+        return route.abort();
+      });
+      const resultsPage=await resultsContext.newPage();
+      await resultsPage.goto(APP+'#r=EARLYFIN01',{waitUntil:'networkidle'});
+      await resultsPage.getByText('Session Results',{exact:true}).waitFor({state:'visible',timeout:5000});
+      await resultsPage.getByText('READ-ONLY',{exact:true}).waitFor({state:'visible',timeout:5000});
+      await resultsPage.locator('#viewer .p-3.text-sm.flex.items-center.gap-2').nth(1).waitFor({state:'visible',timeout:5000});
+      const highlightedTeams=await resultsPage.locator('#viewer .p-3.text-sm.flex.items-center.gap-2').evaluateAll(rows=>
+        rows.map(row=>{
+          const team0=row.querySelectorAll('span')[1],team1=row.querySelectorAll('span')[3];
+          return {
+            team0:!!team0?.classList.contains('text-pickle-500'),
+            team1:!!team1?.classList.contains('text-pickle-500')
+          }
+        })
+      );
+      assert.deepEqual(highlightedTeams,[{team0:true,team1:false},{team0:false,team1:true}],
+        '#r= highlights Team 1 for w=0 and Team 2 for w=1');
+      assert.match(await resultsPage.locator('#viewer').innerText(),/1-0/);
+    } finally {
+      await resultsContext.close();
+    }
+  } finally {
+    await context.close();
+  }
 }
 
+async function mobileEarlyFinishUndoRegression(browser) {
+  const context=await freshContext(browser,devices['iPhone 13']);
+  const page=await context.newPage();
+  try {
+    await page.goto(APP,{waitUntil:'networkidle'});
+    await page.evaluate(()=>{
+      pushS=()=>{};
+      S=mk();
+      Object.assign(S.courts[0],{
+        id:1,name:'Court 1',isActive:true,
+        players:['Alpha','Beta','Gamma','Delta'],
+        score:[1,0],mid:'MOBILEUND01',t:Date.now()-60000,hold:null,stk:0
+      });
+      render();
+    });
+    assert.ok(await page.evaluate(()=>innerWidth<=430),'The Undo regression runs at phone width');
+    const before=await page.evaluate(()=>JSON.stringify(S));
+    await page.locator('#courts button[onclick="fin(1)"]').click();
+    const dialog=page.locator('[role="dialog"]');
+    await dialog.waitFor({state:'visible',timeout:3000});
+    await page.waitForFunction(()=>!!document.activeElement?.closest('[role="dialog"]'),null,{timeout:3000});
+    await dialog.locator('[data-w="0"]').click();
+    await dialog.waitFor({state:'detached'});
+    await page.getByRole('button',{name:'Undo'}).waitFor({state:'visible',timeout:3000});
+    const logged=await page.evaluate(()=>({winner:S.log[0]?.w,active:S.courts[0].isActive,score:S.courts[0].score}));
+    assert.deepEqual(logged,{winner:0,active:false,score:[0,0]});
+    await page.getByRole('button',{name:'Undo'}).click();
+    await page.waitForFunction(()=>S.log.length===0&&S.courts[0].isActive,null,{timeout:3000});
+    const restored=await page.evaluate(()=>JSON.stringify(S));
+    assert.equal(restored,before,'Undo restores the exact active court and pre-prompt match log');
+    const state=await page.evaluate(()=>({
+      active:S.courts[0].isActive,
+      players:S.courts[0].players,
+      score:S.courts[0].score,
+      log:S.log.length,
+      queue:S.queue.length
+    }));
+    assert.deepEqual(state,{
+      active:true,players:['Alpha','Beta','Gamma','Delta'],score:[1,0],log:0,queue:0
+    });
+  } finally {
+    await context.close();
+  }
+}
 async function durableQueueCompactionRegression(browser) {
   const context=await freshContext(browser,devices['Desktop Chrome']);
   const page=await context.newPage();
@@ -437,10 +690,11 @@ async function main() {
   await Promise.all([desktop,iphone,pixel].map(context=>context.tracing.start({screenshots:true,snapshots:true,sources:true})));
   const syncPublishes = [];
   const resultPublishes = [];
-  await simulateV25ToV31(browser);
-  await simulateV26ToV31(browser);
-  await simulateV29ToV31(browser);
-  await simulateV30ToV31(browser);
+  for(let oldVersion=1;oldVersion<=31;oldVersion++){
+    await simulateOldCacheToV32(browser,oldVersion);
+  }
+  await earlyFinishWinnerPromptRegression(browser);
+  await mobileEarlyFinishUndoRegression(browser);
   await avatarProfileRegression(browser);
   await leaderboardPodiumRegression(browser);
   await durableQueueCompactionRegression(browser);
@@ -1672,7 +1926,9 @@ async function main() {
       hostileImportedSessionNameSafe: true,
       resultsQrResponsiveAndShareImage: true,
       resultsBackupRestoresNameAndMatchLog: true,
-      serviceWorkerV25V26V29UpgradeToV30: true,
+      serviceWorkerV1ToV31UpgradeToV32: true,
+      earlyFinishWinnerPrompt: true,
+      mobileEarlyFinishUndo: true,
       deleteWorks: true,
       importRestoresHistory: true,
       mobileScoring: true,

@@ -22,11 +22,13 @@ const versions=allocations.map(x=>Number(x.cache.match(/v([0-9]+)$/)[1])).sort((
 assert.deepEqual(versions,Array.from({length:32},(_,i)=>i+1),'Historical and reserved cache versions must remain contiguous and unique');
 const reservations=allocations.filter(x=>x.status==='reserved'||x.status==='assigned').map(x=>({version:Number(x.cache.match(/v([0-9]+)$/)[1]),pr:x.pr,status:x.status}));
 assert.deepEqual(reservations,[
-  {version:31,pr:62,status:'assigned'},
   {version:32,pr:63,status:'reserved'}
 ],'Release order #61 -> #62 -> #63 assigns v30 -> v31 -> v32');
 const released30=allocations.find(x=>x.cache==='queuezerotwo-v30');
 assert.equal(released30?.status,'released','PR #61 v30 is merged before this PR rebases');
 assert.equal(released30?.merge_commit_sha,'afb83d825785137063cf5f55331035d25965d81d');
+const released31=allocations.find(x=>x.cache==='queuezerotwo-v31');
+assert.equal(released31?.status,'released','PR #62 v31 is merged before this PR rebases');
+assert.equal(released31?.merge_commit_sha,'de036ea293925e06e7ee57036891adfdd70fe2a0');
 assert.equal(manifest.releaseOrder.join(','),'61,62,63');
-console.log(JSON.stringify({pass:true,currentCache:match[1],released:30,reserved:1,assigned:1,uniqueCacheNames:names.length},null,2));
+console.log(JSON.stringify({pass:true,currentCache:match[1],released:31,reserved:1,assigned:0,uniqueCacheNames:names.length},null,2));

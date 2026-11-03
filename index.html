@@ -668,8 +668,37 @@ push(c);buzz(30);beep(660,.2);callMatch(c);save();render();toast(c.players.join(
 /* Scoring + finishing */
 function sc(id,i,d){const c=S.courts.find(x=>x.id==id),b=win(c.score,S.target);c.score[i]=Math.max(0,c.score[i]+d);buzz(d<0?25:15);if(b<0&&win(c.score,S.target)>=0){beep(1000,.35);buzz([40,60,40]);callWin(c)}push(c);save();$('sr').textContent=c.name+': '+c.score[0]+' to '+c.score[1];render()}
 function clear(c){Object.assign(c,{isActive:false,players:[],score:[0,0],mid:'',t:0,hold:null,stk:0})}
-function fin(id){const snap=JSON.stringify(S);fin0(id);undoOffer(snap)}
-function fin0(id){buzz([40,60,40]);const c=S.courts.find(x=>x.id==id),w=win(c.score,S.target);
+function fin(id){
+  const c=S.courts.find(x=>x.id==id);
+  if(!c||!c.isActive)return;
+  // Ask only when points were scored but the rules gave no winner.
+  if(c.score[0]+c.score[1]>0&&win(c.score,S.target)<0)return pickWinner(c);
+  commitFin(id);
+}
+function commitFin(id,forceW){
+  // Take the undo snapshot at confirmation time, immediately before logging.
+  const snap=JSON.stringify(S);
+  fin0(id,forceW);
+  undoOffer(snap);
+}
+function pickWinner(c){
+  const id=c.id,mid=c.mid,lead=c.score[0]>c.score[1]?0:c.score[1]>c.score[0]?1:-1;
+  const d=modal('<div class="p-6"><h3 class="text-xl text-white mb-1">Who won?</h3>'
+    +'<p class="text-xs text-gray-400 mb-4">'+esc(c.name)+' · '+c.score[0]+'-'+c.score[1]+'</p>'
+    +'<div class="space-y-3">'+[0,1].map(i=>'<button data-w="'+i+'" class="w-full '+(lead===i?bP:bS)+'">'
+      +'<span class="block text-xs opacity-70">Team '+(i+1)+'</span>'+nm(c.players,i)
+      +' <span class="font-sport">'+c.score[i]+'</span></button>').join('')+'</div>'
+    +'<button data-w="-1" class="w-full mt-3 '+bS+'">Log without a winner</button>'
+    +'<button data-x class="w-full mt-2 text-sm text-gray-400 hover:text-white">Cancel</button></div>');
+  d.querySelectorAll('[data-w]').forEach(b=>b.onclick=()=>{
+    const w=+b.dataset.w;d.__close();
+    const cur=S.courts.find(x=>x.id==id);
+    if(!cur||!cur.isActive||cur.mid!==mid)return toast('That match changed. Try again.','error');
+    commitFin(id,w);
+  });
+}
+function fin0(id,forceW){buzz([40,60,40]);const c=S.courts.find(x=>x.id==id),
+  w=(forceW===0||forceW===1||forceW===-1)?forceW:win(c.score,S.target);
 if(c.score[0]+c.score[1]>0){S.log.unshift({mid:c.mid,c:c.name,p:c.players,s:c.score,w,tg:S.target,t:Date.now(),d:Date.now()-c.t})}
 const n=c.name;
 if(S.ws&&w>=0){
