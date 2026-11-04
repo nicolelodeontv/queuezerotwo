@@ -920,14 +920,20 @@ function split4(g){let best,bc=1e9;[[0,1,2,3],[0,2,1,3],[0,3,1,2]].forEach((o,k)
 let c=(pr(a[0],a[1])+pr(b[0],b[1]))*100+(((S.sd*9301+k*49297)%100)/200);
 if(S.md=='bal')c+=Math.abs(lvl(a[0])+lvl(a[1])-lvl(b[0])-lvl(b[1]))*2;else a.forEach(x=>b.forEach(y=>c+=oc(x,y)));
 if(c<bc){bc=c;best=a.concat(b)}});return best}
-/* Keep the first two selected players fixed, then test every pair among the next six eligible spots. This catches fresh quartets that require changing both back positions. */
+/* Keep the first two eligible players fixed and search the entire remaining stack.
+   Prefer fewer repeated partnerships; break ties with the smallest combined queue
+   positions so players are not pulled forward from farther back without a benefit. */
 function refine4(ix){
- const bestBase=ix.slice(0,4),pool=ix.slice(2,8);
+ const bestBase=ix.slice(0,4),pool=ix.slice(2);
  let best=bestBase,bs=rep4(best.map(i=>S.queue[i]));
+ let bd=(pool.length+1)+1; // pair at pool positions 0 and 1
  for(let i=0;i<pool.length;i++)for(let j=i+1;j<pool.length;j++){
   const candidate=[ix[0],ix[1],pool[i],pool[j]];
   const score=rep4(candidate.map(k=>S.queue[k]));
-  if(score<bs){bs=score;best=candidate}
+  const distance=(i+j)*(pool.length+1)+j;
+  if(score<bs||(score===bs&&distance<bd)){
+   bs=score;bd=distance;best=candidate;
+  }
  }
  return best.sort((a,b)=>a-b)
 }
