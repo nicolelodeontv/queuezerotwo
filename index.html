@@ -1192,11 +1192,14 @@ function timingMeta(){
   if(ds.length<3)return null;
   return {a:Math.round(ds.slice(0,20).reduce((sum,d)=>sum+d,0)/Math.min(ds.length,20))}
 }
-function liveQueueProjection(queue,eligibleIndexes,courts,averageMs,now=Date.now()){
+function liveQueueProjection(queue,eligibleIndexes,courts,averageMs,now=Date.now(),upNextIndexes=[]){
  const q=Array.isArray(queue)?queue:[];
  const order=Array.isArray(eligibleIndexes)?eligibleIndexes:q.map((_,i)=>i);
  const ranks=new Map();
  order.forEach(index=>{if(Number.isInteger(index)&&index>=0&&index<q.length&&!ranks.has(index))ranks.set(index,ranks.size+1)});
+ const next=[],nextSet=new Set();
+ if(Array.isArray(upNextIndexes))upNextIndexes.forEach(index=>{if(ranks.has(index)&&!nextSet.has(index)){nextSet.add(index);next.push(index)}});
+ const schedule=next.concat(order.filter(index=>!nextSet.has(index)));
  const duration=Math.max(0,Math.min(6*60*60*1000,Number(averageMs)||0));
  const available=(Array.isArray(courts)?courts:[]).map(c=>{
   if(!c||c.a!==true)return 0;
@@ -1207,7 +1210,7 @@ function liveQueueProjection(queue,eligibleIndexes,courts,averageMs,now=Date.now
  if(!available.length)available.push(0);
  const etaByIndex=new Map();
  if(duration>0){
-  for(let offset=0;offset<order.length;offset+=4){
+  for(let offset=0;offset<schedule.length;offset+=4){
    let ci=0;for(let j=1;j<available.length;j++)if(available[j]<available[ci])ci=j;
    const eta=available[ci];
    for(let j=offset;j<Math.min(offset+4,order.length);j++){
@@ -1216,7 +1219,7 @@ function liveQueueProjection(queue,eligibleIndexes,courts,averageMs,now=Date.now
    available[ci]=eta+duration
   }
  }else if(available.some(value=>value===0)){
-  order.slice(0,4).forEach(index=>{if(Number.isInteger(index)&&index>=0&&index<q.length)etaByIndex.set(index,0)})
+  schedule.slice(0,4).forEach(index=>{if(Number.isInteger(index)&&index>=0&&index<q.length)etaByIndex.set(index,0)})
  }
  return q.map((name,index)=>{
   const eligiblePosition=ranks.get(index)??null;
@@ -1363,10 +1366,13 @@ const courts=courtsData.map(c=>{
 const upData=upItems.length?upItems:nextNames.map((n,i)=>({n,p:i+1}));
 const nx=upData.length?'<div class="grid grid-cols-2 gap-3 text-sm"><div class="rounded-xl bg-blue-500/10 p-3"><div class="text-xs font-bold text-blue-400 mb-1">Team 1</div>'+upData.slice(0,2).map((x,i)=>{x=x&&typeof x==='object'?x:{};return '<div class="flex items-center gap-2 py-0.5"><span class="text-[11px] text-gray-400 w-7 flex-none">#'+(num(x.p)||i+1)+'</span><span class="truncate">'+esc(player(x.n))+'</span></div>'}).join('')+'</div><div class="rounded-xl bg-orange-500/10 p-3"><div class="text-xs font-bold text-orange-400 mb-1">Team 2</div>'+upData.slice(2).map((x,i)=>{x=x&&typeof x==='object'?x:{};return '<div class="flex items-center gap-2 py-0.5"><span class="text-[11px] text-gray-400 w-7 flex-none">#'+(num(x.p)||i+3)+'</span><span class="truncate">'+esc(player(x.n))+'</span></div>'}).join('')+'</div></div>':'<p class="text-sm text-gray-400">Waiting for 4+ players.</p>';
 const lb=lbData.length?'<table class="w-full text-sm text-center"><thead class="text-xs text-gray-400"><tr><th class="text-left p-2">#</th><th class="text-left">Player</th><th>W-L</th><th>+/-</th></tr></thead><tbody class="divide-y divide-dark-700">'+lbData.map((x,i)=>{x=x&&typeof x==='object'?x:{};const w=num(x.w),l=num(x.l),diff=num(x.d);return '<tr><td class="text-left p-2 text-gray-400">'+(i+1)+'</td><td class="text-left">'+esc(player(x.n))+'</td><td>'+w+'-'+l+'</td><td class="'+(diff>0?'text-green-400':diff<0?'text-red-400':'')+'">'+(diff>0?'+':'')+diff+'</td></tr>'}).join('')+'</tbody></table>':'<p class="text-sm text-gray-400 p-4 text-center">No scored matches yet.</p>';
-const queueProjection=liveQueueProjection(queueData,d.ei,courtsData,d.tm&&typeof d.tm==='object'?num(d.tm.a):0);
+const upNextIndexes=upItems.map(x=>num(x&&x.p)-1);
+const upNextSet=new Set(upNextIndexes);
+const queueProjection=liveQueueProjection(queueData,d.ei,courtsData,d.tm&&typeof d.tm==='object'?num(d.tm.a):0,Date.now(),upNextIndexes);
 const stack=queueData.length?queueData.map((p,i)=>{
  const item=queueProjection[i]||{resting:true,eligiblePosition:null,etaMs:null};
- const status=item.resting?'<span class="text-[10px] text-amber-300 border border-amber-500/30 rounded px-1.5 py-0.5">RESTING · SKIPPED</span>':'<span class="text-[10px] text-gray-400">Eligible #'+item.eligiblePosition+'</span>';
+ const nextBadge=upNextSet.has(i)?'<span class="text-[10px] text-green-300 border border-green-500/30 rounded px-1.5 py-0.5">UP NEXT</span>':'';
+ const status=item.resting?'<span class="text-[10px] text-amber-300 border border-amber-500/30 rounded px-1.5 py-0.5">RESTING · SKIPPED</span>':'<span class="text-[10px] text-gray-400">Eligible #'+item.eligiblePosition+'</span>'+nextBadge;
  const eta=item.resting?'':item.etaMs===null?'ETA building':item.etaMs<=0?'Ready now':'about '+Math.max(1,Math.round(item.etaMs/60000))+' min';
  return '<div class="flex items-center gap-2 py-1.5 text-sm"><span class="text-[11px] text-gray-400 w-7 flex-none">#'+(i+1)+'</span><span class="truncate min-w-0">'+esc(player(p))+'</span>'+status+'<span class="text-[11px] text-gray-500 ml-auto flex-none">'+eta+'</span></div>'
 }).join(''):'Empty';
