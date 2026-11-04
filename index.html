@@ -566,7 +566,7 @@ function normalizeFairnessRecords(raw){
 
 function readStoredLiveSequence(){try{const saved=JSON.parse(localStorage.getItem(K)||'null');return saved&&Number.isSafeInteger(saved.liveSeq)&&saved.liveSeq>=0?saved.liveSeq:0}catch(e){return 0}}
 function resumeLiveSequence(){S.liveSeq=Math.max(Number.isSafeInteger(S.liveSeq)&&S.liveSeq>=0?S.liveSeq:0,readStoredLiveSequence(),Date.now());return S.liveSeq}
-function load(){try{const raw=localStorage.getItem(K),s=JSON.parse(raw);if(s&&s.courts){S=s;S.log=S.log||[];S.waiting=S.waiting||[];S.rest=S.rest||{};S.fair=normalizeFairnessRecords(S.fair);S.target=S.target||11;S.lv=S.lv||{};if(S.rotationModeVersion!==1){S.md='soc';S.rotationModeVersion=1}else S.md=S.md==='soc'?'soc':'bal';S.sd=S.sd||0;S.gp=S.gp||{};resumeLiveSequence();S.wt=normalizeWaitTimes(S.queue||[],S.wt);S.ws=!!S.ws;S.eq=!!S.eq;S.tts=!!S.tts;S.wl=S.wl==null?2:S.wl;S.rr=!!S.rr;S.lr=!!S.lr;S.lpf=!!S.lpf;S.rpf=!!S.rpf;if(s.ended&&s.rid&&!Object.prototype.hasOwnProperty.call(s,'rr'))S.lr=true;S.courts.forEach(c=>{c.score=c.score||[0,0]})}}catch(e){}}
+function load(){try{const raw=localStorage.getItem(K),s=JSON.parse(raw);if(s&&s.courts){S=s;S.log=S.log||[];S.waiting=S.waiting||[];S.rest=S.rest||{};S.fair=normalizeFairnessRecords(S.fair);S.target=S.target||11;S.lv=S.lv||{};if(S.rotationModeVersion!==1){S.md='soc';S.ws=false;S.rotationModeVersion=1}else S.md=S.md==='soc'?'soc':'bal';S.sd=S.sd||0;S.gp=S.gp||{};resumeLiveSequence();S.wt=normalizeWaitTimes(S.queue||[],S.wt);S.ws=!!S.ws;S.eq=!!S.eq;S.tts=!!S.tts;S.wl=S.wl==null?2:S.wl;S.rr=!!S.rr;S.lr=!!S.lr;S.lpf=!!S.lpf;S.rpf=!!S.rpf;if(s.ended&&s.rid&&!Object.prototype.hasOwnProperty.call(s,'rr'))S.lr=true;S.courts.forEach(c=>{c.score=c.score||[0,0]})}}catch(e){}}
 function save(){S.liveSeq=Math.max(Number.isSafeInteger(S.liveSeq)&&S.liveSeq>=0?S.liveSeq:0,readStoredLiveSequence());try{localStorage.setItem(K,JSON.stringify(S));storageWriteSucceeded('state')}catch(e){storageWriteFailed('state')}pushS()}
 
 function toast(m,type){const d=document.createElement('div');
@@ -857,7 +857,7 @@ function cleanState(o){
   R.rest=clean(s.rest,v=>v?1:0);
   R.lv=clean(s.lv,v=>Math.min(6,Math.max(0,Math.floor(Number(v))||0)));
   R.md=s.rotationModeVersion===1&&s.md==='bal'?'bal':'soc';R.rotationModeVersion=1;R.sd=Number.isFinite(+s.sd)?+s.sd:0;R.gp=clean(s.gp,v=>Math.max(0,Math.floor(Number(v))||0));R.fair=normalizeFairnessRecords(s.fair);R.wt=normalizeWaitTimes(R.queue,s.wt);
-  R.ws=!!s.ws;R.wl=[2,3,4].includes(+s.wl)?+s.wl:2;R.eq=!!s.eq;R.tts=!!s.tts;R.snd=s.snd!==false;R.hap=s.hap!==false;
+  R.ws=s.rotationModeVersion===1&&!!s.ws;R.wl=[2,3,4].includes(+s.wl)?+s.wl:2;R.eq=!!s.eq;R.tts=!!s.tts;R.snd=s.snd!==false;R.hap=s.hap!==false;
   R.target=[11,15,21].includes(+s.target)?+s.target:11;R.wb=s.wb===1?1:2;R.courts=R.courts.slice(0,Math.max(1,Math.min(8,s.courts.length)));
   R.courts=s.courts.slice(0,8).map((c,i)=>{
     const base=R.courts[i]||{id:i+1,name:'Court '+(i+1),isActive:false,players:[],score:[0,0],mid:'',t:0,hold:null,stk:0};

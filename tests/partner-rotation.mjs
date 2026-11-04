@@ -61,10 +61,11 @@ const nextRound = A.split4(A.S.queue);
 assert.equal(A.pc(nextRound[0], nextRound[1]), 0, 'Team 1 must rotate away from its previous partner');
 assert.equal(A.pc(nextRound[2], nextRound[3]), 0, 'Team 2 must rotate away from its previous partner');
 
-// 5. Social Mix is the default, and legacy saved sessions/backups migrate once.
+// 5. Social Mix is the default, and legacy saved sessions/backups migrate once and disable Winners Stay.
 assert.match(html, /md:'soc',rotationModeVersion:1/, 'new sessions must default to Social Mix');
-assert.ok(html.includes("if(S.rotationModeVersion!==1){S.md='soc';S.rotationModeVersion=1}"), 'legacy saved sessions must migrate to Social Mix once');
+assert.ok(html.includes("if(S.rotationModeVersion!==1){S.md='soc';S.ws=false;S.rotationModeVersion=1}"), 'legacy saved sessions must migrate to Social Mix once');
 assert.ok(html.includes("R.md=s.rotationModeVersion===1&&s.md==='bal'?'bal':'soc';R.rotationModeVersion=1"), 'legacy backups must migrate while preserving a newer explicit Balanced choice');
+assert.ok(html.includes("R.ws=s.rotationModeVersion===1&&!!s.ws;"), 'legacy backups must disable Winners Stay during the one-time migration');
 assert.ok(html.includes("function smd(m){S.md=m==='soc'?'soc':'bal';S.rotationModeVersion=1;"), 'manual mode changes must be preserved after migration');
 
 console.log('partner-rotation: all checks passed');
