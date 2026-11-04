@@ -9,10 +9,11 @@
     67,
     68,
     69,
-    70
+    70,
+    71
   ],
-  "currentBranch": "fix/partner-rotation-two-player-lookahead",
-  "currentCache": "queuezerotwo-v38",
+  "currentBranch": "fix/full-queue-partner-search",
+  "currentCache": "queuezerotwo-v39",
   "allocations": [
     {
       "cache": "queuezerotwo-v1",
@@ -217,9 +218,16 @@
     },
     {
       "cache": "queuezerotwo-v38",
-      "status": "reserved",
+      "status": "released",
       "pr": 70,
-      "branch": "fix/partner-rotation-two-player-lookahead"
+      "branch": "fix/partner-rotation-two-player-lookahead",
+      "merge_commit_sha": "d3d22538af1929b64c97db922c3fb7d333c4dfe9"
+    },
+    {
+      "cache": "queuezerotwo-v39",
+      "status": "reserved",
+      "pr": 71,
+      "branch": "fix/full-queue-partner-search"
     }
   ]
 }
