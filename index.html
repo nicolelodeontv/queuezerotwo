@@ -1200,8 +1200,9 @@ function liveQueueProjection(queue,eligibleIndexes,courts,averageMs,now=Date.now
  const duration=Math.max(0,Math.min(6*60*60*1000,Number(averageMs)||0));
  const available=(Array.isArray(courts)?courts:[]).map(c=>{
   if(!c||c.a!==true)return 0;
+  if(!duration)return Infinity;
   const started=Number(c.t),elapsed=Number.isFinite(started)&&started>0?Math.max(0,now-started):0;
-  return duration?Math.max(0,duration-elapsed):0
+  return Math.max(0,duration-elapsed)
  });
  if(!available.length)available.push(0);
  const etaByIndex=new Map();
@@ -1214,6 +1215,8 @@ function liveQueueProjection(queue,eligibleIndexes,courts,averageMs,now=Date.now
    }
    available[ci]=eta+duration
   }
+ }else if(available.some(value=>value===0)){
+  order.slice(0,4).forEach(index=>{if(Number.isInteger(index)&&index>=0&&index<q.length)etaByIndex.set(index,0)})
  }
  return q.map((name,index)=>{
   const eligiblePosition=ranks.get(index)??null;
