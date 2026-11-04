@@ -123,6 +123,19 @@ function makePicker(state) {
   assert.ok(result.every(x=>x.resting&&x.eligiblePosition===null&&x.etaMs===null));
 }
 
+// Even before a duration baseline exists, an actually open court makes the
+// next four eligible players ready now; later groups remain unestimated.
+{
+  const result = projection(
+    ['A','B','C','D','E'],
+    [0,1,2,3,4],
+    [{a:true,t:1_800_000_000_000},{a:false,t:0}],
+    0,
+    1_800_000_000_000
+  );
+  assert.deepEqual(result.map(x=>x.etaMs),[0,0,0,0,null]);
+}
+
 // The existing Equal Sit-outs priority is the same order sent to Live View.
 {
   const state = {
