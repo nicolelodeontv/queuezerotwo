@@ -48,6 +48,28 @@ for (const [n, games] of [[8, 4], [9, 6], [10, 7]]) {
   assert.equal(repeats, 0, `${n} players, ${games} games: partners repeated`);
 }
 
+// 3. Regression: the old one-slot look-ahead repeated P2 + P3 even though
+// changing both back positions to P4 + P7 made a fresh pairing possible.
+A.S = fresh(8, 'soc');
+const earlierTeams = [
+  ['P0', 'P1', 'P2', 'P3'],
+  ['P4', 'P5', 'P6', 'P7'],
+  ['P0', 'P3', 'P1', 'P2'],
+  ['P4', 'P6', 'P5', 'P7'],
+  ['P0', 'P2', 'P3', 'P1'],
+  ['P4', 'P7', 'P6', 'P5'],
+];
+A.S.log = earlierTeams.map(p => ({ p, w: 0, s: [11, 5] }));
+A.S.sd = earlierTeams.length;
+A.S.queue = ['P0', 'P2', 'P3', 'P1', 'P4', 'P7', 'P6', 'P5'];
+const repairedIx = A.refine4(A.S.queue.map((_, i) => i));
+assert.ok(repairedIx.includes(0) && repairedIx.includes(1), 'the first two players keep their spots');
+const repairedPlayers = repairedIx.map(i => A.S.queue[i]);
+assert.equal(A.rep4(repairedPlayers), 0, 'two-slot look-ahead must find a quartet with no repeated teammates');
+const repairedTeams = A.split4(repairedPlayers);
+assert.equal(A.pc(repairedTeams[0], repairedTeams[1]), 0, 'Team 1 must avoid a prior partnership');
+assert.equal(A.pc(repairedTeams[2], repairedTeams[3]), 0, 'Team 2 must avoid a prior partnership');
+
 // 3. A repeat that is truly unavoidable (exactly 4 players) must not crash.
 A.S = fresh(4);
 A.S.log.push({ p: ['P0', 'P1', 'P2', 'P3'], w: 0, s: [11, 5] });
