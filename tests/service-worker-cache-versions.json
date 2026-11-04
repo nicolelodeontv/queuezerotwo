@@ -10,10 +10,11 @@
     68,
     69,
     70,
-    71
+    71,
+    72
   ],
-  "currentBranch": "fix/full-queue-partner-search",
-  "currentCache": "queuezerotwo-v39",
+  "currentBranch": "feat/rest-aware-live-view",
+  "currentCache": "queuezerotwo-v40",
   "allocations": [
     {
       "cache": "queuezerotwo-v1",
@@ -225,9 +226,16 @@
     },
     {
       "cache": "queuezerotwo-v39",
-      "status": "reserved",
+      "status": "released",
       "pr": 71,
-      "branch": "fix/full-queue-partner-search"
+      "branch": "fix/full-queue-partner-search",
+      "merge_commit_sha": "87bee81e2ec5f5f0fcce19b552cd68e48c47ec17"
+    },
+    {
+      "cache": "queuezerotwo-v40",
+      "status": "reserved",
+      "pr": 72,
+      "branch": "feat/rest-aware-live-view"
     }
   ]
 }
