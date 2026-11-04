@@ -80,7 +80,7 @@ async function runNyorkOnce(iteration) {
     viewer.on('framenavigated',frame=>{if(frame===viewer.mainFrame())viewerMainNavigations++});
     await viewer.waitForFunction(({seq}) => {
       const text = document.querySelector('#viewer')?.innerText || '';
-      return text.includes('LIVE · CONNECTED') && text.includes('Alice & Bob') && text.includes('Cara & Dan') && /\b6\b/.test(text) && /\b4\b/.test(text) && SV?.d?.seq === seq;
+      return text.includes('LIVE · CONNECTED') && text.includes('Alice & Bob') && text.includes('Cara & Dan') && /\b6\b/.test(text) && /\b4\b/.test(text) && typeof SV!=='undefined' && SV?.d?.seq === seq;
     }, {seq: published.seq}, {timeout: 15000});
     const firstViewerText = await viewer.locator('#viewer').innerText();
     assert.match(firstViewerText, /LIVE · CONNECTED/);
@@ -200,8 +200,9 @@ async function runNyorkOnce(iteration) {
       publishQueueBusy:PQBusy
     }));
     const reloadViewerWaitError=await viewer.waitForFunction(({seq})=>{
-      const d=SV?.d;
-      const received=SV?.receivedBroadcastSeqs||[];
+      const viewerState=typeof SV!=='undefined'?SV:null;
+      const d=viewerState?.d;
+      const received=viewerState?.receivedBroadcastSeqs||[];
       const outcome=d?.courts?.[0]?.s?.[0]===12&&Number.isSafeInteger(d.seq)&&d.seq>=seq;
       return received.includes(seq)||outcome;
     },{seq:reloadSentSeq},{timeout:10000}).then(()=>null).catch(error=>error.message);
@@ -251,7 +252,7 @@ async function runNyorkOnce(iteration) {
       return {seq:payload.seq,success:!q.error&&q.data===true,error:q.error?.message||null};
     });
     assert.equal(firstTabUpdate.success,true);
-    await viewer.waitForFunction(({seq})=>SV?.lastBroadcastSeq===seq&&SV?.d?.courts?.[0]?.s?.[0]===13,{seq:firstTabUpdate.seq},{timeout:10000});
+    await viewer.waitForFunction(({seq})=>typeof SV!=='undefined'&&SV?.lastBroadcastSeq===seq&&SV?.d?.courts?.[0]?.s?.[0]===13,{seq:firstTabUpdate.seq},{timeout:10000});
     await secondHost.waitForFunction(({seq})=>S.liveSeq>=seq,{seq:firstTabUpdate.seq},{timeout:5000});
     const secondTabUpdate=await secondHost.evaluate(async()=>{
       S.courts[0].score=[14,4];
@@ -262,7 +263,7 @@ async function runNyorkOnce(iteration) {
     assert.equal(secondTabUpdate.success,true);
     assert.ok(secondTabUpdate.seq>firstTabUpdate.seq,'Second host tab allocates a higher sequence');
     const secondTabViewerWaitError=await viewer.waitForFunction(({seq})=>
-      SV?.lastBroadcastSeq===seq&&SV?.d?.courts?.[0]?.s?.[0]===14,
+      typeof SV!=='undefined'&&SV?.lastBroadcastSeq===seq&&SV?.d?.courts?.[0]?.s?.[0]===14,
       {seq:secondTabUpdate.seq},{timeout:10000}
     ).then(()=>null).catch(error=>error.message);
     if(secondTabViewerWaitError){
@@ -322,7 +323,7 @@ async function runNyorkOnce(iteration) {
     assert.ok(restored.seq>=restored.baseline,'Stale imported sequence resumes from the clock baseline');
     liveCode=restored.code;
     await viewer.goto(APP+'#s='+liveCode,{waitUntil:'domcontentloaded'});
-    await viewer.waitForFunction(({seq})=>SV?.status==='SUBSCRIBED'&&SV?.d?.seq===seq&&SV?.d?.courts?.[0]?.s?.[0]===20,{seq:restored.seq},{timeout:15000});
+    await viewer.waitForFunction(({seq})=>typeof SV!=='undefined'&&SV?.status==='SUBSCRIBED'&&SV?.d?.seq===seq&&SV?.d?.courts?.[0]?.s?.[0]===20,{seq:restored.seq},{timeout:15000});
     const restoredFollowup=await host.evaluate(async()=>{
       S.courts[0].score=[21,4];
       const payload=await sdata();
@@ -331,7 +332,7 @@ async function runNyorkOnce(iteration) {
     });
     assert.equal(restoredFollowup.success,true);
     assert.ok(restoredFollowup.seq>restored.seq,'Restored host continues with a higher sequence');
-    await viewer.waitForFunction(({seq})=>SV?.lastBroadcastSeq===seq&&SV?.d?.courts?.[0]?.s?.[0]===21,{seq:restoredFollowup.seq},{timeout:10000});
+    await viewer.waitForFunction(({seq})=>typeof SV!=='undefined'&&SV?.lastBroadcastSeq===seq&&SV?.d?.courts?.[0]?.s?.[0]===21,{seq:restoredFollowup.seq},{timeout:10000});
 
     // Two state publishes happen back-to-back without waiting for the viewer.
     // The final state must win even if the first Broadcast arrives late.
@@ -351,8 +352,9 @@ async function runNyorkOnce(iteration) {
     assert.equal(rapidUpdates.second.success,true,'Second rapid publish succeeds');
     assert.ok(rapidUpdates.second.seq>rapidUpdates.first.seq,'Rapid publishes receive increasing sequences');
     await viewer.waitForFunction(({seq,score})=>{
-      const d=SV?.d;
-      const received=SV?.receivedBroadcastSeqs||[];
+      const viewerState=typeof SV!=='undefined'?SV:null;
+      const d=viewerState?.d;
+      const received=viewerState?.receivedBroadcastSeqs||[];
       return received.includes(seq)||(d?.courts?.[0]?.s?.[0]===score&&Number.isSafeInteger(d.seq)&&d.seq>=seq);
     },{seq:rapidUpdates.second.seq,score:41},{timeout:10000});
     const rapidViewerState=await viewer.evaluate(()=>({
@@ -383,7 +385,7 @@ async function runNyorkOnce(iteration) {
       try{
         await viewer.waitForFunction(({seq,score})=>{
           const text=document.querySelector('#viewer')?.innerText||'';
-          return SV?.lastBroadcastSeq===seq&&SV?.d?.seq===seq&&SV?.d?.courts?.[0]?.s?.[0]===score&&text.includes(String(score));
+          return typeof SV!=='undefined'&&SV?.lastBroadcastSeq===seq&&SV?.d?.seq===seq&&SV?.d?.courts?.[0]?.s?.[0]===score&&text.includes(String(score));
         },{seq,score},{timeout:10000});
       }catch(error){
         const viewerText=await viewer.locator('#viewer').innerText().catch(()=>'');
@@ -419,7 +421,7 @@ async function runNyorkOnce(iteration) {
     await viewerContext.setOffline(false);
     await viewer.waitForFunction(({seq,score})=>{
       const text=document.querySelector('#viewer')?.innerText||'';
-      return navigator.onLine&&SV?.status==='SUBSCRIBED'&&SV?.d?.seq===seq&&SV?.d?.courts?.[0]?.s?.[0]===score&&text.includes('LIVE · CONNECTED');
+      return navigator.onLine&&typeof SV!=='undefined'&&SV?.status==='SUBSCRIBED'&&SV?.d?.seq===seq&&SV?.d?.courts?.[0]?.s?.[0]===score&&text.includes('LIVE · CONNECTED');
     },{seq:reconnectSeq,score:reconnectScore},{timeout:15000});
     assert.equal(viewerMainNavigations,navigationsBeforeReconnect,'Reconnect must recover without a page reload');
     const reconnectMetrics=await viewer.evaluate(()=>viewerDiagnostics());
@@ -443,7 +445,7 @@ async function runNyorkOnce(iteration) {
     try{
       await viewer.waitForFunction(({seq,hostileCourt})=>{
         const text=(document.querySelector('#viewer')?.innerText||'').toLowerCase();
-        return SV?.lastBroadcastSeq===seq&&SV?.d?.seq===seq&&SV?.d?.courts?.[0]?.n===hostileCourt&&text.includes(hostileCourt.toLowerCase());
+        return typeof SV!=='undefined'&&SV?.lastBroadcastSeq===seq&&SV?.d?.seq===seq&&SV?.d?.courts?.[0]?.n===hostileCourt&&text.includes(hostileCourt.toLowerCase());
       },{seq:hostileSeq,hostileCourt},{timeout:10000});
     }catch(error){
       const diagnostic=await viewer.evaluate(async({seq})=>{
