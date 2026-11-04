@@ -1213,8 +1213,8 @@ function liveQueueProjection(queue,eligibleIndexes,courts,averageMs,now=Date.now
   for(let offset=0;offset<schedule.length;offset+=4){
    let ci=0;for(let j=1;j<available.length;j++)if(available[j]<available[ci])ci=j;
    const eta=available[ci];
-   for(let j=offset;j<Math.min(offset+4,order.length);j++){
-    const index=order[j];if(Number.isInteger(index)&&index>=0&&index<q.length)etaByIndex.set(index,eta)
+   for(let j=offset;j<Math.min(offset+4,schedule.length);j++){
+    const index=schedule[j];if(Number.isInteger(index)&&index>=0&&index<q.length)etaByIndex.set(index,eta)
    }
    available[ci]=eta+duration
   }
