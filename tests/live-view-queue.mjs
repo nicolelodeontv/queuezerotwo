@@ -10,20 +10,20 @@ function sourceBlock(startText, endText) {
   return html.slice(start, end).trim();
 }
 
-const projectionSource = sourceBlock('function liveQueueProjection(', '\\nfunction buildUpNext');
+const projectionSource = sourceBlock('function liveQueueProjection(', '\nfunction buildUpNext');
 const projection = new Function(`${projectionSource}; return liveQueueProjection;`)();
 
 const num = value => {
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : 0;
 };
-const normalizeSource = sourceBlock('function normalizeLiveSessionPayload(', '\\nfunction applyLiveSessionData');
+const normalizeSource = sourceBlock('function normalizeLiveSessionPayload(', '\nfunction applyLiveSessionData');
 const normalize = new Function('num', 'TextEncoder', `${normalizeSource}; return normalizeLiveSessionPayload;`)(num, TextEncoder);
 
 // Extract the exact eligible-index selector so the tests exercise the same
 // queue ordering code used by both the host's Up Next picker and Live View.
-const eligibleSource = sourceBlock('function eligibleQueueIndexes()', '\\nfunction pickN(');
-const pickerSource = sourceBlock('function pickN(', '\\nconst pick4');
+const eligibleSource = sourceBlock('function eligibleQueueIndexes()', '\nfunction pickN(');
+const pickerSource = sourceBlock('function pickN(', '\nconst pick4');
 function makePicker(state) {
   return new Function('S0', `
     let S=S0;
