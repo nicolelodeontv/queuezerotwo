@@ -78,12 +78,12 @@ async function setupFour(page) {
   assert.equal(await page.locator('#qc').innerText(), '4');
 }
 
-async function simulateOldCacheToV34(browser,oldVersion) {
+async function simulateOldCacheToV35(browser,oldVersion) {
   const context = await browser.newContext({...devices['Desktop Chrome'],serviceWorkers:'allow',locale:'en-US'});
   const page = await context.newPage();
   let swFetch = 0;
   const currentSw = fs.readFileSync(path.resolve('sw.js'), 'utf8');
-  assert.match(currentSw,/queuezerotwo-v34/);
+  assert.match(currentSw,/queuezerotwo-v35/);
   const oldSw = `const V='queuezerotwo-v${oldVersion}';self.addEventListener('install',e=>e.waitUntil(caches.open(V).then(c=>c.put('/__queuezerotwo_v${oldVersion}_sentinel__',new Response('v${oldVersion}'))).then(()=>self.skipWaiting())));self.addEventListener('activate',e=>e.waitUntil(self.clients.claim()));`;
   await context.route('**/sw.js', async route => {
     swFetch++;
@@ -101,7 +101,7 @@ async function simulateOldCacheToV34(browser,oldVersion) {
   await page.evaluate(async()=>{const r=await navigator.serviceWorker.getRegistration();await r.update()});
   await page.waitForFunction(async()=>{
     const r=await navigator.serviceWorker.getRegistration();
-    return !!r?.waiting || await caches.has('queuezerotwo-v34');
+    return !!r?.waiting || await caches.has('queuezerotwo-v35');
   },null,{timeout:10000});
   await page.evaluate(async()=>{
     const r=await navigator.serviceWorker.getRegistration();
@@ -109,7 +109,7 @@ async function simulateOldCacheToV34(browser,oldVersion) {
   });
   await page.waitForFunction(async()=>{
     const r=await navigator.serviceWorker.getRegistration();
-    return !!r && !r.waiting && r.active?.state==='activated' && await caches.has('queuezerotwo-v34');
+    return !!r && !r.waiting && r.active?.state==='activated' && await caches.has('queuezerotwo-v35');
   },null,{timeout:10000});
   // The aborted Supabase request must settle before the startup-resume timer
   // fires, leaving one pending state item for queue coalescing to replace.
@@ -119,7 +119,7 @@ async function simulateOldCacheToV34(browser,oldVersion) {
     return q.length===1&&Number.isSafeInteger(q[0]?.payload?.seq);
   },null,{timeout:5000});
   const out=await page.evaluate(async(oldVersion)=>{
-    const cache=await caches.open('queuezerotwo-v34');
+    const cache=await caches.open('queuezerotwo-v35');
     return {
       queue:JSON.parse(localStorage.getItem('queuezerotwo-publish-queue-v1')||'{"items":[]}').items,
       state:JSON.parse(localStorage.getItem('pickleStackState')||'{}'),
@@ -682,6 +682,79 @@ async function playerRotationFairnessRegression(browser) {
   }
 }
 
+async function sessionFairnessTrendsRegression(browser) {
+  const context=await freshContext(browser,devices['Desktop Chrome']);
+  const page=await context.newPage();
+  try {
+    await page.goto(APP,{waitUntil:'networkidle'});
+    const outcome=await page.evaluate(()=>{
+      pushS=()=>{};
+      S=mk();
+      const now=Date.now();
+      S.name='Saturday Open Play';
+      S.queue=['Eli','Fay'];
+      S.rest={fay:1};
+      S.log=[{p:['Ava','Ben','Cara','Dan'],s:[11,8],w:0,c:'Court 1',tg:11,t:now-300000,d:240000}];
+      S.gp={ava:3,ben:2,cara:2,dan:2,eli:1};
+      S.fair={
+        ava:{sitouts:1,consecutiveSitouts:0,maxConsecutiveSitouts:1,totalWaitMs:600000,waitSamples:2},
+        ben:{sitouts:2,consecutiveSitouts:1,maxConsecutiveSitouts:2,totalWaitMs:900000,waitSamples:3},
+        cara:{sitouts:1,consecutiveSitouts:0,maxConsecutiveSitouts:1,totalWaitMs:300000,waitSamples:1},
+        dan:{sitouts:1,consecutiveSitouts:0,maxConsecutiveSitouts:1,totalWaitMs:300000,waitSamples:1},
+        eli:{sitouts:3,consecutiveSitouts:2,maxConsecutiveSitouts:3,totalWaitMs:1200000,waitSamples:2},
+        fay:{sitouts:0,consecutiveSitouts:0,maxConsecutiveSitouts:0,totalWaitMs:0,waitSamples:0}
+      };
+      const saved=archive();
+      const snapshot=saved[0].fairness;
+      const previous=JSON.parse(JSON.stringify(saved[0]));
+      previous.id='OLDER1';previous.name='Previous Saturday';previous.t=now-86400000;
+      previous.fairness.score=Math.max(0,(previous.fairness.score||0)-12);
+      S.hist=[saved[0],previous];
+      const imported=cleanState({courts:mk().courts,hist:S.hist});
+      const hostile=cleanState({courts:mk().courts,hist:[{id:'BAD1',name:'Bad',t:now,g:1,top:[],fairness:{score:150,players:[{name:'__proto__',games:99},{name:'Nia',games:-3,sitouts:-2,streak:2,maxStreak:1,totalWaitMs:-1,waitSamples:1}]}}]});
+      S.hist=imported.hist;
+      render();
+      return {
+        snapshot,archivedCount:saved.length,importedScore:imported.hist[0].fairness.score,
+        importedPlayers:imported.hist[0].fairness.players.length,
+        hostileScore:hostile.hist[0].fairness.score,
+        hostilePlayers:hostile.hist[0].fairness.players,
+        hasPrevious:imported.hist[1].fairness.score!==null
+      };
+    });
+    assert.equal(outcome.archivedCount,1,'Archiving a completed session creates one history record');
+    assert.ok(outcome.snapshot&&outcome.snapshot.version===1,'Archived session has a versioned fairness snapshot');
+    assert.ok(outcome.snapshot.score>=0&&outcome.snapshot.score<=100,'The archived balance score stays within 0–100');
+    assert.equal(outcome.snapshot.players.length,6,'The snapshot retains players from games, queue and fairness counters');
+    assert.equal(outcome.snapshot.participants,5,'Players who opted to rest are excluded from active participant counts');
+    assert.equal(outcome.snapshot.totalGamesStarted,10,'The snapshot totals player game starts');
+    assert.ok(outcome.snapshot.totalSitouts>0,'The snapshot totals eligible sit-outs');
+    assert.equal(outcome.importedScore,outcome.snapshot.score,'Fairness history survives validated backup import');
+    assert.equal(outcome.importedPlayers,6,'Per-player fairness history survives backup import');
+    assert.equal(outcome.hostileScore,100,'Imported scores are clamped to the supported range');
+    assert.deepEqual(outcome.hostilePlayers.map(p=>p.name),['Nia'],'Prototype-sensitive names are rejected in imported history');
+    assert.equal(outcome.hostilePlayers[0].games,0,'Negative imported player counts are normalized');
+    assert.equal(outcome.hasPrevious,true,'The previous session fairness report remains available');
+    await page.locator('button[onclick="fairnessTrends()"]').click();
+    const dialog=page.locator('[role="dialog"]').last();
+    await dialog.getByText('Session Fairness Trends',{exact:true}).waitFor({state:'visible',timeout:5000});
+    const text=await dialog.innerText();
+    assert.match(text,/Tracked sessions/);
+    assert.match(text,/Fairness score by session/);
+    assert.match(text,/Least served average/i);
+    assert.match(text,/Most served average/i);
+    assert.match(text,/Player comparison/);
+    assert.match(text,/Eli/);
+    assert.match(text,/Ava/);
+    assert.doesNotMatch(text,/Fay/,'Players marked as resting are not ranked as under-served');
+    assert.equal(await dialog.locator('[role="img"][aria-label^="Fairness score across"]').count(),1,
+      'The chart exposes an accessible description of the archived trend');
+    await dialog.getByRole('button',{name:'Close'}).click();
+  } finally {
+    await context.close();
+  }
+}
+
 async function avatarProfileRegression(browser) {
   const context = await freshContext(browser, devices['Desktop Chrome']);
   const page = await context.newPage();
@@ -758,14 +831,15 @@ async function main() {
   await Promise.all([desktop,iphone,pixel].map(context=>context.tracing.start({screenshots:true,snapshots:true,sources:true})));
   const syncPublishes = [];
   const resultPublishes = [];
-  for(let oldVersion=1;oldVersion<=33;oldVersion++){
-    await simulateOldCacheToV34(browser,oldVersion);
+  for(let oldVersion=1;oldVersion<=34;oldVersion++){
+    await simulateOldCacheToV35(browser,oldVersion);
   }
   await earlyFinishWinnerPromptRegression(browser);
   await mobileEarlyFinishUndoRegression(browser);
   await avatarProfileRegression(browser);
   await leaderboardPodiumRegression(browser);
   await playerRotationFairnessRegression(browser);
+  await sessionFairnessTrendsRegression(browser);
   await durableQueueCompactionRegression(browser);
   const sync = await syncContext(browser, devices['Pixel 7'], syncPublishes, resultPublishes);
   const sp = await sync.newPage();
@@ -1995,7 +2069,7 @@ async function main() {
       hostileImportedSessionNameSafe: true,
       resultsQrResponsiveAndShareImage: true,
       resultsBackupRestoresNameAndMatchLog: true,
-      serviceWorkerV1ToV33UpgradeToV34: true,
+      serviceWorkerV1ToV34UpgradeToV35: true,
       earlyFinishWinnerPrompt: true,
       mobileEarlyFinishUndo: true,
       deleteWorks: true,
