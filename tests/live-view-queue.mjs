@@ -217,7 +217,8 @@ function makePicker(state) {
 assert.match(html,/ei=S\.eq\?eligibleQueueIndexes\(\):null/);
 assert.match(html,/ri=S\.eq\?\[\]:q\.map/);
 assert.match(html,/t:c\.isActive\?Number\(c\.t\)\|\|0:0/);
-assert.match(html,/liveQueueProjection\(queueData,d\.ei,courtsData/);\nassert.match(html,/UP NEXT/);
+assert.match(html,/liveQueueProjection\(queueData,d\.ei,courtsData/);
+assert.match(html,/UP NEXT/);
 assert.match(html,/RESTING · SKIPPED/);
 assert.match(html,/Eligible #/);
 
