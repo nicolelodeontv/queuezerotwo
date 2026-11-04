@@ -169,6 +169,13 @@ function makePicker(state) {
   assert.equal(data.courts[0].t,now-5*60_000);
   assert.equal(data.courts[1].t,0);
 
+  const restAware = normalize({
+    q:['Legacy A','Resting','Legacy B'],
+    ri:[1],
+    courts:[{n:'Court 1',a:false,p:[],s:[0,0]}],
+  });
+  assert.deepEqual(restAware.ei,[0,2],'resting indexes are omitted when Equal Sit-outs ordering is not active');
+
   const legacy = normalize({
     q:['Legacy A','Legacy B'],
     courts:[{n:'Court 1',a:true,p:[],s:[0,0]}],
@@ -179,7 +186,8 @@ function makePicker(state) {
 
 // Guard the host/viewer wiring so a future refactor cannot silently stop
 // publishing eligibility metadata or rendering the resting indicator.
-assert.match(html,/ei=eligibleQueueIndexes\(\)/);
+assert.match(html,/ei=S\.eq\?eligibleQueueIndexes\(\):null/);
+assert.match(html,/ri=S\.eq\?\[\]:q\.map/);
 assert.match(html,/t:c\.isActive\?Number\(c\.t\)\|\|0:0/);
 assert.match(html,/liveQueueProjection\(queueData,d\.ei,courtsData/);
 assert.match(html,/RESTING · SKIPPED/);
