@@ -1220,7 +1220,7 @@ function liveQueueProjection(queue,eligibleIndexes,courts,averageMs,now=Date.now
  }
  return q.map((name,index)=>{
   const eligiblePosition=ranks.get(index)??null;
-  return {position:index+1,eligiblePosition,resting:eligiblePosition===null,etaMs:eligiblePosition===null||duration<=0?null:etaByIndex.get(index)??null}
+  return {position:index+1,eligiblePosition,resting:eligiblePosition===null,etaMs:eligiblePosition===null?null:etaByIndex.get(index)??null}
  })
 }
 function buildUpNext(q){
