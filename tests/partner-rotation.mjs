@@ -70,24 +70,78 @@ const repairedTeams = A.split4(repairedPlayers);
 assert.equal(A.pc(repairedTeams[0], repairedTeams[1]), 0, 'Team 1 must avoid a prior partnership');
 assert.equal(A.pc(repairedTeams[2], repairedTeams[3]), 0, 'Team 2 must avoid a prior partnership');
 
-// 3. A repeat that is truly unavoidable (exactly 4 players) must not crash.
+
+// 4. Large rosters: search the entire eligible stack and never choose a worse
+// partnership score than another pair available behind the same first two players.
+function simulateLargeRoster(n,games,mode,winnerMode) {
+  A.S = fresh(n,mode);
+  A.S.lv = Object.fromEntries(Array.from({length:n},(_,i)=>['p'+i,(i%5)+1]));
+  let repeats=0,unavoidableRounds=0,zeroRepeatRounds=0;
+  for(let g=0;g<games;g++) {
+    const eligible=A.S.queue.map((_,i)=>i);
+    const pool=eligible.slice(2);
+    const ix=A.refine4(eligible);
+    assert.equal(new Set(ix).size,4, `${n} players: four distinct players`);
+    assert.ok(ix.includes(eligible[0])&&ix.includes(eligible[1]), `${n} players: first two eligible players keep their positions`);
+    const chosen=ix.map(i=>A.S.queue[i]);
+    const chosenScore=A.rep4(chosen);
+    let minScore=Infinity,minDistance=Infinity;
+    for(let i=0;i<pool.length;i++) for(let j=i+1;j<pool.length;j++) {
+      const candidate=[A.S.queue[eligible[0]],A.S.queue[eligible[1]],A.S.queue[pool[i]],A.S.queue[pool[j]]];
+      const score=A.rep4(candidate);
+      const distance=(i+j)*(pool.length+1)+j;
+      if(score<minScore||(score===minScore&&distance<minDistance)) {
+        minScore=score;minDistance=distance;
+      }
+    }
+    assert.equal(chosenScore,minScore,`${n} players, game ${g+1}: picker must find the fewest possible teammate repeats across the full queue`);
+    const rankA=eligible.indexOf(ix[2])-2,rankB=eligible.indexOf(ix[3])-2;
+    assert.equal((rankA+rankB)*(pool.length+1)+rankB,minDistance,`${n} players, game ${g+1}: tie-break must preserve the closest queue positions`);
+    const teams=A.split4(chosen);
+    const partnerCounts=[A.pc(teams[0],teams[1]),A.pc(teams[2],teams[3])];
+    const repeated=partnerCounts.filter(count=>count>0).length;
+    if(repeated) {
+      assert.ok(minScore>0,`${n} players, game ${g+1}: a repeat is allowed only when no repeat-free pairing exists`);
+      repeats+=repeated;unavoidableRounds++;
+    } else zeroRepeatRounds++;
+    const winner=winnerMode==='team1'?0:winnerMode==='team2'?1:g%2;
+    A.S.log.push({p:teams.slice(),w:winner,s:[11,7]});
+    for(let k=ix.length-1;k>=0;k--) A.S.queue.splice(ix[k],1);
+    A.S.queue.push(...(winner===0?teams:[...teams.slice(2),...teams.slice(0,2)]));
+    A.S.sd++;
+  }
+  return {n,mode,winnerMode,repeats,unavoidableRounds,zeroRepeatRounds};
+}
+const largeRosterRuns=[];
+for(const n of [20,24,30,40]) {
+  for(const mode of ['soc','bal']) {
+    for(const winnerMode of ['team1','alternate']) {
+      const result=simulateLargeRoster(n,100,mode,winnerMode);
+      largeRosterRuns.push(result);
+      if(n>=24) assert.equal(result.repeats,0,`${n} players, ${mode}, ${winnerMode}: 100 games should avoid repeat partners`);
+      if(n===20) assert.ok(result.unavoidableRounds>0,`20 players, ${mode}, ${winnerMode}: test must cover the no-fresh-pair fallback`);
+    }
+  }
+}
+
+// 5. A repeat that is truly unavoidable (exactly 4 players) must not crash.
 A.S = fresh(4);
 A.S.log.push({ p: ['P0', 'P1', 'P2', 'P3'], w: 0, s: [11, 5] });
 const t = A.split4(A.S.queue);
 assert.equal(t.length, 4);
 
-// 4. With four players, the next round selects a different teammate pairing.
+// 6. With four players, the next round selects a different teammate pairing.
 A.S = fresh(4, 'soc');
 A.S.log.push({ p: ['P0', 'P1', 'P2', 'P3'], w: 0, s: [11, 5] });
 const nextRound = A.split4(A.S.queue);
 assert.equal(A.pc(nextRound[0], nextRound[1]), 0, 'Team 1 must rotate away from its previous partner');
 assert.equal(A.pc(nextRound[2], nextRound[3]), 0, 'Team 2 must rotate away from its previous partner');
 
-// 5. Social Mix is the default, and legacy saved sessions/backups migrate once and disable Winners Stay.
+// 7. Social Mix is the default, and legacy saved sessions/backups migrate once and disable Winners Stay.
 assert.match(html, /md:'soc',rotationModeVersion:1/, 'new sessions must default to Social Mix');
 assert.ok(html.includes("if(S.rotationModeVersion!==1){S.md='soc';S.ws=false;S.rotationModeVersion=1}"), 'legacy saved sessions must migrate to Social Mix once');
 assert.ok(html.includes("R.md=s.rotationModeVersion===1&&s.md==='bal'?'bal':'soc';R.rotationModeVersion=1"), 'legacy backups must migrate while preserving a newer explicit Balanced choice');
 assert.ok(html.includes("R.ws=s.rotationModeVersion===1&&!!s.ws;"), 'legacy backups must disable Winners Stay during the one-time migration');
 assert.ok(html.includes("function smd(m){S.md=m==='soc'?'soc':'bal';S.rotationModeVersion=1;"), 'manual mode changes must be preserved after migration');
 
-console.log('partner-rotation: all checks passed');
+console.log(JSON.stringify({pass:true,largeRosterRuns},null,2));
