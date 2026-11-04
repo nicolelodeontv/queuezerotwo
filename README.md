@@ -15,7 +15,7 @@ Live: https://queuezerotwo.vercel.app
 - **Players:** all-time player profiles with skill levels, match history, partner statistics, per-player backup and restore, and optional local avatars. Avatar images are cropped and resized on this device and are not uploaded to Supabase.
 - **Backup:** Export and Import the whole session as JSON. Imports are validated and size-limited.
 - **On court:** large score controls, haptics, sound, voice announcements, wake lock during matches, and light/dark themes.
-- **Live View:** a read-only page for players to follow courts, queue positions, estimated waits, Up Next, the stack, the leaderboard, and finished-results snapshots.
+- **Live View:** a read-only page for players to follow courts, Up Next, queue positions, and the leaderboard. The stack shows physical and eligible positions separately, marks resting players as skipped, and estimates wait using open courts, active match start times, and recent match duration. Estimates are advisory, not guarantees.
 - **Host handoff:** transfer Live View hosting to another device with a QR code.
 - **Offline/PWA:** service worker caching with an update-ready prompt and installable PWA metadata. Live session writes use a durable offline queue and retry after connectivity returns; finished-results entries are retained separately from replaceable live-state snapshots.
 
