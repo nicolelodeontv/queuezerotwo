@@ -74,6 +74,8 @@ jobs:
         run: node tests/partner-rotation.mjs
       - name: Test rest-aware Live View queue and wait estimates
         run: node tests/live-view-queue.mjs
+      - name: Test progressive post-game queue reshuffle
+        run: node tests/queue-return-rotation.mjs
       - name: Verify live Production alias matches current main
         shell: bash
         run: bash tests/production-serving-check.sh
