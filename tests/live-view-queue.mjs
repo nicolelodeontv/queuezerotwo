@@ -136,6 +136,15 @@ function makePicker(state) {
   assert.equal(result[2].eligiblePosition,2);
 }
 
+// An open court cannot start an incomplete group of fewer than four.
+{
+  const result = projection(['A','B','Resting'],[0,1],[
+    {a:false,t:0}
+  ],0,1_800_000_000_000);
+  assert.deepEqual(result.map(x=>x.etaMs),[null,null,null]);
+  assert.equal(result.filter(x=>!x.resting).length,2);
+}
+
 // All-resting queues have no eligible positions and must not get a fake ETA.
 {
   const result = projection(['A','B'],[],[{a:false,t:0}],30*60_000,1_800_000_000_000);
