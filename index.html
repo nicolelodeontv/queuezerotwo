@@ -920,11 +920,17 @@ function split4(g){let best,bc=1e9;[[0,1,2,3],[0,2,1,3],[0,3,1,2]].forEach((o,k)
 let c=(pr(a[0],a[1])+pr(b[0],b[1]))*100+(((S.sd*9301+k*49297)%100)/200);
 if(S.md=='bal')c+=Math.abs(lvl(a[0])+lvl(a[1])-lvl(b[0])-lvl(b[1]))*2;else a.forEach(x=>b.forEach(y=>c+=oc(x,y)));
 if(c<bc){bc=c;best=a.concat(b)}});return best}
-/* If the next four would have to repeat a partnership, swap one of the last two for someone just behind them in the stack. The first two in line always keep their spot. */
-function refine4(ix){let best=ix.slice(0,4),bs=rep4(best.map(i=>S.queue[i]));
-if(bs>0){const extra=ix.slice(4,8),base=best.slice();
-for(let e=0;e<extra.length;e++)for(const p of [3,2]){const t=base.slice();t[p]=extra[e];const s=rep4(t.map(i=>S.queue[i]));if(s<bs){bs=s;best=t}}}
-return best.sort((a,b)=>a-b)}
+/* Keep the first two selected players fixed, then test every pair among the next six eligible spots. This catches fresh quartets that require changing both back positions. */
+function refine4(ix){
+ const bestBase=ix.slice(0,4),pool=ix.slice(2,8);
+ let best=bestBase,bs=rep4(best.map(i=>S.queue[i]));
+ for(let i=0;i<pool.length;i++)for(let j=i+1;j<pool.length;j++){
+  const candidate=[ix[0],ix[1],pool[i],pool[j]];
+  const score=rep4(candidate.map(k=>S.queue[k]));
+  if(score<bs){bs=score;best=candidate}
+ }
+ return best.sort((a,b)=>a-b)
+}
 function takeNext(){const ix=pick4(),nm4=ix.map(i=>S.queue[i]),t=split4(nm4);recordRotationSelection(nm4);for(let k=ix.length-1;k>=0;k--)S.queue.splice(ix[k],1);nm4.forEach(gpi);clearWaiting(nm4);S.sd++;return t}
 function smd(m){S.md=m==='soc'?'soc':'bal';S.rotationModeVersion=1;save();render()}
 function tws(){S.ws=!S.ws;save();render()}
