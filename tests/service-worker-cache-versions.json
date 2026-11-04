@@ -6,10 +6,11 @@
     63,
     65,
     66,
-    67
+    67,
+    68
   ],
-  "currentBranch": "feature/session-fairness-trends",
-  "currentCache": "queuezerotwo-v35",
+  "currentBranch": "feature/finish-log-winner-selection",
+  "currentCache": "queuezerotwo-v36",
   "allocations": [
     {
       "cache": "queuezerotwo-v1",
@@ -193,9 +194,16 @@
     },
     {
       "cache": "queuezerotwo-v35",
-      "status": "reserved",
+      "status": "released",
       "pr": 67,
-      "branch": "feature/session-fairness-trends"
+      "branch": "feature/session-fairness-trends",
+      "merge_commit_sha": "33d89273f9bb917ea5c4f0ce3b2d0314de4aee34"
+    },
+    {
+      "cache": "queuezerotwo-v36",
+      "status": "reserved",
+      "pr": 68,
+      "branch": "feature/finish-log-winner-selection"
     }
   ]
 }

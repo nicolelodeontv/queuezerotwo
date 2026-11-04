@@ -78,12 +78,20 @@ async function setupFour(page) {
   assert.equal(await page.locator('#qc').innerText(), '4');
 }
 
-async function simulateOldCacheToV35(browser,oldVersion) {
+async function finishAndChoose(page,winner=0) {
+  await page.getByRole('button',{name:'FINISH & LOG'}).click();
+  const dialog=page.locator('[role="dialog"]').last();
+  await dialog.waitFor({state:'visible',timeout:5000});
+  await dialog.locator('[data-w="'+winner+'"]').click();
+  await dialog.waitFor({state:'detached'});
+}
+
+async function simulateOldCacheToV36(browser,oldVersion) {
   const context = await browser.newContext({...devices['Desktop Chrome'],serviceWorkers:'allow',locale:'en-US'});
   const page = await context.newPage();
   let swFetch = 0;
   const currentSw = fs.readFileSync(path.resolve('sw.js'), 'utf8');
-  assert.match(currentSw,/queuezerotwo-v35/);
+  assert.match(currentSw,/queuezerotwo-v36/);
   const oldSw = `const V='queuezerotwo-v${oldVersion}';self.addEventListener('install',e=>e.waitUntil(caches.open(V).then(c=>c.put('/__queuezerotwo_v${oldVersion}_sentinel__',new Response('v${oldVersion}'))).then(()=>self.skipWaiting())));self.addEventListener('activate',e=>e.waitUntil(self.clients.claim()));`;
   await context.route('**/sw.js', async route => {
     swFetch++;
@@ -101,7 +109,7 @@ async function simulateOldCacheToV35(browser,oldVersion) {
   await page.evaluate(async()=>{const r=await navigator.serviceWorker.getRegistration();await r.update()});
   await page.waitForFunction(async()=>{
     const r=await navigator.serviceWorker.getRegistration();
-    return !!r?.waiting || await caches.has('queuezerotwo-v35');
+    return !!r?.waiting || await caches.has('queuezerotwo-v36');
   },null,{timeout:10000});
   await page.evaluate(async()=>{
     const r=await navigator.serviceWorker.getRegistration();
@@ -109,7 +117,7 @@ async function simulateOldCacheToV35(browser,oldVersion) {
   });
   await page.waitForFunction(async()=>{
     const r=await navigator.serviceWorker.getRegistration();
-    return !!r && !r.waiting && r.active?.state==='activated' && await caches.has('queuezerotwo-v35');
+    return !!r && !r.waiting && r.active?.state==='activated' && await caches.has('queuezerotwo-v36');
   },null,{timeout:10000});
   // The aborted Supabase request must settle before the startup-resume timer
   // fires, leaving one pending state item for queue coalescing to replace.
@@ -119,7 +127,7 @@ async function simulateOldCacheToV35(browser,oldVersion) {
     return q.length===1&&Number.isSafeInteger(q[0]?.payload?.seq);
   },null,{timeout:5000});
   const out=await page.evaluate(async(oldVersion)=>{
-    const cache=await caches.open('queuezerotwo-v35');
+    const cache=await caches.open('queuezerotwo-v36');
     return {
       queue:JSON.parse(localStorage.getItem('queuezerotwo-publish-queue-v1')||'{"items":[]}').items,
       state:JSON.parse(localStorage.getItem('pickleStackState')||'{}'),
@@ -139,7 +147,7 @@ async function simulateOldCacheToV35(browser,oldVersion) {
   await context.close();
 }
 
-async function earlyFinishWinnerPromptRegression(browser) {
+async function finishLogWinnerSelectionRegression(browser) {
   const context=await freshContext(browser,devices['Desktop Chrome']);
   const page=await context.newPage();
   const seed=async(score,options={})=>page.evaluate(({score,options})=>{
@@ -259,19 +267,24 @@ async function earlyFinishWinnerPromptRegression(browser) {
     assert.equal(result.log,0);
     assert.equal(result.mid,'');
 
-    // A completed 11-5 match and an untouched 0-0 court do not prompt.
+    // A completed score still opens the picker, and the host can override the scoreboard leader.
     await seed([11,5]);
-    await page.locator('#courts button[onclick="fin(1)"]').click();
-    await page.waitForFunction(()=>S.log.length===1&&!S.courts[0].isActive,null,{timeout:3000});
-    assert.equal(await page.locator('[role="dialog"]').count(),0);
-    assert.equal(await page.evaluate(()=>S.log[0].w),0);
+    dialog=await openPrompt();
+    await dialog.locator('[data-w="1"]').click();
+    await dialog.waitFor({state:'detached'});
+    result=await page.evaluate(()=>({winner:S.log[0]?.w,score:S.log[0]?.s,active:S.courts[0].isActive}));
+    assert.deepEqual(result,{winner:1,score:[11,5],active:false});
 
+    // Even a 0-0 finish lets the host choose a winner and records that choice.
     await seed([0,0]);
-    await page.locator('#courts button[onclick="fin(1)"]').click();
-    await page.waitForFunction(()=>!S.courts[0].isActive,null,{timeout:3000});
-    assert.equal(await page.locator('[role="dialog"]').count(),0);
-    result=await page.evaluate(()=>({log:S.log.length,queue:S.queue.slice()}));
-    assert.deepEqual(result,{log:0,queue:['Alpha','Beta','Gamma','Delta']});
+    dialog=await openPrompt();
+    await dialog.locator('[data-w="0"]').click();
+    await dialog.waitFor({state:'detached'});
+    result=await page.evaluate(()=>({
+      log:S.log.length,winner:S.log[0]?.w,score:S.log[0]?.s,
+      active:S.courts[0].isActive,queue:S.queue.slice()
+    }));
+    assert.deepEqual(result,{log:1,winner:0,score:[0,0],active:false,queue:['Alpha','Beta','Gamma','Delta']});
 
     // Winners Stay applies the selected winner even when the score disagrees.
     await seed([1,0],{ws:true,queue:['Echo','Foxtrot','Hotel','India']});
@@ -831,10 +844,10 @@ async function main() {
   await Promise.all([desktop,iphone,pixel].map(context=>context.tracing.start({screenshots:true,snapshots:true,sources:true})));
   const syncPublishes = [];
   const resultPublishes = [];
-  for(let oldVersion=1;oldVersion<=34;oldVersion++){
-    await simulateOldCacheToV35(browser,oldVersion);
+  for(let oldVersion=1;oldVersion<=35;oldVersion++){
+    await simulateOldCacheToV36(browser,oldVersion);
   }
-  await earlyFinishWinnerPromptRegression(browser);
+  await finishLogWinnerSelectionRegression(browser);
   await mobileEarlyFinishUndoRegression(browser);
   await avatarProfileRegression(browser);
   await leaderboardPodiumRegression(browser);
@@ -1656,7 +1669,7 @@ async function main() {
       null,
       {timeout:5000},
     );
-    await dp.getByRole('button', {name:'FINISH & LOG'}).click();
+    await finishAndChoose(dp,-1);
     await dp.waitForFunction(
       () => !S.courts.some(c => c.isActive) && S.queue.length === 4 && Object.keys(S.wt).length === 4,
       null,
@@ -1676,7 +1689,7 @@ async function main() {
       await dp.locator('button[aria-label="Plus point, Team 1"]').first().click();
     }
 
-    await dp.getByRole('button', {name: 'FINISH & LOG'}).click();
+    await finishAndChoose(dp,0);
     await dp.locator('#msg').getByText('Match logged.').waitFor({state:'visible', timeout:5000});
 
     // A finished session can be serialized into a full backup for restore.
@@ -1856,7 +1869,7 @@ async function main() {
       await dp.locator('button[aria-label="Plus point, Team 1"]').first().click();
     }
     const liveSeqBeforeFinish=await dp.evaluate(()=>Number(S.liveSeq)||0);
-    await dp.getByRole('button', {name: 'FINISH & LOG'}).click();
+    await finishAndChoose(dp,0);
     await dp.locator('#msg').getByText('Match logged.').waitFor({state:'visible', timeout:5000});
     // Let the debounced Live View snapshot advance persisted seq before Undo.
     // Sequence-only metadata must not make an otherwise untouched match "too late".
@@ -1867,7 +1880,7 @@ async function main() {
     for (let i = 0; i < 11; i++) {
       await dp.locator('button[aria-label="Plus point, Team 1"]').first().click();
     }
-    await dp.getByRole('button', {name: 'FINISH & LOG'}).click();
+    await finishAndChoose(dp,0);
     await dp.locator('#msg').getByText('Match logged.').waitFor({state:'visible', timeout:5000});
     await openMenu(dp);
     await dp.locator('#qmenu button[title="Players"]').click();
@@ -2069,8 +2082,8 @@ async function main() {
       hostileImportedSessionNameSafe: true,
       resultsQrResponsiveAndShareImage: true,
       resultsBackupRestoresNameAndMatchLog: true,
-      serviceWorkerV1ToV34UpgradeToV35: true,
-      earlyFinishWinnerPrompt: true,
+      serviceWorkerV1ToV35UpgradeToV36: true,
+      finishLogWinnerSelection: true,
       mobileEarlyFinishUndo: true,
       deleteWorks: true,
       importRestoresHistory: true,

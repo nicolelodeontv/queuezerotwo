@@ -19,11 +19,11 @@ for(const item of allocations){
   assert.match(item.cache,/^queuezerotwo-v[1-9][0-9]*$/,'Cache names use the numeric QueueZeroTwo version format');
 }
 const versions=allocations.map(x=>Number(x.cache.match(/v([0-9]+)$/)[1])).sort((a,b)=>a-b);
-assert.deepEqual(versions,Array.from({length:35},(_,i)=>i+1),'Historical and reserved cache versions must remain contiguous and unique');
+assert.deepEqual(versions,Array.from({length:36},(_,i)=>i+1),'Historical and reserved cache versions must remain contiguous and unique');
 const reservations=allocations.filter(x=>x.status==='reserved'||x.status==='assigned').map(x=>({version:Number(x.cache.match(/v([0-9]+)$/)[1]),pr:x.pr,status:x.status}));
 assert.deepEqual(reservations,[
-  {version:35,pr:67,status:'reserved'}
-],'PR #63 v32, PR #65 v33, and PR #66 v34 are released; PR #67 reserves v35');
+  {version:36,pr:68,status:'reserved'}
+],'PR #63 v32, PR #65 v33, PR #66 v34, and PR #67 v35 are released; PR #68 reserves v36');
 const released30=allocations.find(x=>x.cache==='queuezerotwo-v30');
 assert.equal(released30?.status,'released','PR #61 v30 is merged before this PR rebases');
 assert.equal(released30?.merge_commit_sha,'afb83d825785137063cf5f55331035d25965d81d');
@@ -40,5 +40,9 @@ const released34=allocations.find(x=>x.cache==='queuezerotwo-v34');
 assert.equal(released34?.status,'released','PR #66 v34 is merged before this PR rebases');
 assert.equal(released34?.pr,66);
 assert.equal(released34?.merge_commit_sha,'ba3a3102657965ae9fb60aa4d5eca802e9953e46');
-assert.equal(manifest.releaseOrder.join(','),'61,62,63,65,66,67');
-console.log(JSON.stringify({pass:true,currentCache:match[1],released:34,reserved:1,assigned:0,uniqueCacheNames:names.length},null,2));
+const released35=allocations.find(x=>x.cache==='queuezerotwo-v35');
+assert.equal(released35?.status,'released','PR #67 v35 is merged before this PR rebases');
+assert.equal(released35?.pr,67);
+assert.equal(released35?.merge_commit_sha,'33d89273f9bb917ea5c4f0ce3b2d0314de4aee34');
+assert.equal(manifest.releaseOrder.join(','),'61,62,63,65,66,67,68');
+console.log(JSON.stringify({pass:true,currentCache:match[1],released:35,reserved:1,assigned:0,uniqueCacheNames:names.length},null,2));
