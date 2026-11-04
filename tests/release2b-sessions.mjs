@@ -86,12 +86,12 @@ async function finishAndChoose(page,winner=0) {
   await dialog.waitFor({state:'detached'});
 }
 
-async function simulateOldCacheToV38(browser,oldVersion) {
+async function simulateOldCacheToV39(browser,oldVersion) {
   const context = await browser.newContext({...devices['Desktop Chrome'],serviceWorkers:'allow',locale:'en-US'});
   const page = await context.newPage();
   let swFetch = 0;
   const currentSw = fs.readFileSync(path.resolve('sw.js'), 'utf8');
-  assert.match(currentSw,/queuezerotwo-v38/);
+  assert.match(currentSw,/queuezerotwo-v39/);
   const oldSw = `const V='queuezerotwo-v${oldVersion}';self.addEventListener('install',e=>e.waitUntil(caches.open(V).then(c=>c.put('/__queuezerotwo_v${oldVersion}_sentinel__',new Response('v${oldVersion}'))).then(()=>self.skipWaiting())));self.addEventListener('activate',e=>e.waitUntil(self.clients.claim()));`;
   await context.route('**/sw.js', async route => {
     swFetch++;
@@ -109,7 +109,7 @@ async function simulateOldCacheToV38(browser,oldVersion) {
   await page.evaluate(async()=>{const r=await navigator.serviceWorker.getRegistration();await r.update()});
   await page.waitForFunction(async()=>{
     const r=await navigator.serviceWorker.getRegistration();
-    return !!r?.waiting || await caches.has('queuezerotwo-v38');
+    return !!r?.waiting || await caches.has('queuezerotwo-v39');
   },null,{timeout:10000});
   await page.evaluate(async()=>{
     const r=await navigator.serviceWorker.getRegistration();
@@ -117,7 +117,7 @@ async function simulateOldCacheToV38(browser,oldVersion) {
   });
   await page.waitForFunction(async()=>{
     const r=await navigator.serviceWorker.getRegistration();
-    return !!r && !r.waiting && r.active?.state==='activated' && await caches.has('queuezerotwo-v38');
+    return !!r && !r.waiting && r.active?.state==='activated' && await caches.has('queuezerotwo-v39');
   },null,{timeout:10000});
   // The aborted Supabase request must settle before the startup-resume timer
   // fires, leaving one pending state item for queue coalescing to replace.
@@ -127,7 +127,7 @@ async function simulateOldCacheToV38(browser,oldVersion) {
     return q.length===1&&Number.isSafeInteger(q[0]?.payload?.seq);
   },null,{timeout:5000});
   const out=await page.evaluate(async(oldVersion)=>{
-    const cache=await caches.open('queuezerotwo-v38');
+    const cache=await caches.open('queuezerotwo-v39');
     return {
       queue:JSON.parse(localStorage.getItem('queuezerotwo-publish-queue-v1')||'{"items":[]}').items,
       state:JSON.parse(localStorage.getItem('pickleStackState')||'{}'),
@@ -844,8 +844,8 @@ async function main() {
   await Promise.all([desktop,iphone,pixel].map(context=>context.tracing.start({screenshots:true,snapshots:true,sources:true})));
   const syncPublishes = [];
   const resultPublishes = [];
-  for(let oldVersion=1;oldVersion<=37;oldVersion++){
-    await simulateOldCacheToV38(browser,oldVersion);
+  for(let oldVersion=1;oldVersion<=38;oldVersion++){
+    await simulateOldCacheToV39(browser,oldVersion);
   }
   await finishLogWinnerSelectionRegression(browser);
   await mobileEarlyFinishUndoRegression(browser);
@@ -2082,7 +2082,7 @@ async function main() {
       hostileImportedSessionNameSafe: true,
       resultsQrResponsiveAndShareImage: true,
       resultsBackupRestoresNameAndMatchLog: true,
-      serviceWorkerV1ToV37UpgradeToV38: true,
+      serviceWorkerV1ToV38UpgradeToV39: true,
       finishLogWinnerSelection: true,
       mobileEarlyFinishUndo: true,
       deleteWorks: true,
