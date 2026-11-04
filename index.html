@@ -1242,9 +1242,9 @@ function resultsSnapshot(){
 function buildLiveSessionData(){
  resumeLiveSequence();
  S.liveSeq++;
- const seq=S.liveSeq,q=S.queue,upm=buildUpNext(q),tm=timingMeta(),ei=eligibleQueueIndexes();
+ const seq=S.liveSeq,q=S.queue,upm=buildUpNext(q),tm=timingMeta(),ei=S.eq?eligibleQueueIndexes():null,ri=S.eq?[]:q.map((p,i)=>isRest(p)?i:-1).filter(i=>i>=0);
  persistStateOnly();
- return{seq,t:S.target,wb:S.wb,courts:S.courts.map(c=>({n:c.name,a:c.isActive,p:c.players,s:c.score,t:c.isActive?Number(c.t)||0:0})),nx:upm.nx,up:upm.up,tm,q,ei,lb:stats().slice(0,20)}
+ return{seq,t:S.target,wb:S.wb,courts:S.courts.map(c=>({n:c.name,a:c.isActive,p:c.players,s:c.score,t:c.isActive?Number(c.t)||0:0})),nx:upm.nx,up:upm.up,tm,q,ei,ri,lb:stats().slice(0,20)}
 }
 async function sdata(){
  const lockName='queuezerotwo-live-seq-'+String(S.sid||'local');
@@ -1279,9 +1279,11 @@ function normalizeLiveSessionPayload(data){
  const strings=(v,count,max)=>Array.isArray(v)?v.slice(0,count).map(x=>txt(x,max)):[];
  const n=v=>Math.max(-1000000,Math.min(1000000,num(v)));
  const q= strings(data.q,5000,40);
+ const restingIndexes=new Set();
+ if(Array.isArray(data.ri))data.ri.slice(0,q.length).forEach(i=>{if(Number.isSafeInteger(i)&&i>=0&&i<q.length)restingIndexes.add(i)});
  const ei=[],seenEligible=new Set();
  if(Array.isArray(data.ei)){data.ei.slice(0,q.length).forEach(i=>{if(Number.isSafeInteger(i)&&i>=0&&i<q.length&&!seenEligible.has(i)){seenEligible.add(i);ei.push(i)}})}
- else q.forEach((_,i)=>ei.push(i));
+ else q.forEach((_,i)=>{if(!restingIndexes.has(i))ei.push(i)});
  const timestamp=v=>{const x=Number(v);return Number.isSafeInteger(x)&&x>0&&x<=8640000000000000?x:0};
  const courts=Array.isArray(data.courts)?data.courts.slice(0,32).filter(c=>c&&typeof c==='object'&&!Array.isArray(c)).map(c=>{
   const scores=Array.isArray(c.s)?c.s:[];
