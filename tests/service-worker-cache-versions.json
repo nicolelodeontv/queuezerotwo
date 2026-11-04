@@ -7,10 +7,11 @@
     65,
     66,
     67,
-    68
+    68,
+    69
   ],
-  "currentBranch": "feature/finish-log-winner-selection",
-  "currentCache": "queuezerotwo-v36",
+  "currentBranch": "feature/social-mix-default-partner-rotation",
+  "currentCache": "queuezerotwo-v37",
   "allocations": [
     {
       "cache": "queuezerotwo-v1",
@@ -201,9 +202,16 @@
     },
     {
       "cache": "queuezerotwo-v36",
-      "status": "reserved",
+      "status": "released",
       "pr": 68,
-      "branch": "feature/finish-log-winner-selection"
+      "branch": "feature/finish-log-winner-selection",
+      "merge_commit_sha": "a6fa47d5dcff6aaead3bfe8e03ca11be3fea8a43"
+    },
+    {
+      "cache": "queuezerotwo-v37",
+      "status": "reserved",
+      "pr": 69,
+      "branch": "feature/social-mix-default-partner-rotation"
     }
   ]
 }

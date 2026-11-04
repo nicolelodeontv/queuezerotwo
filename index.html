@@ -529,7 +529,7 @@ async function flushPublishQueue(){
   }
 }
 function push(){}
-const mk=()=>({queue:[],waiting:[],rest:{},log:[],fair:{},target:11,lv:{},md:'bal',sd:0,gp:{},wt:{},liveSeq:0,ws:false,wl:2,eq:false,tts:false,hap:true,rr:false,lr:false,lpf:false,rpf:false,courts:[1,2,3,4].map(id=>({id,name:'Court '+id,isActive:false,players:[],score:[0,0],mid:'',t:0}))});
+const mk=()=>({queue:[],waiting:[],rest:{},log:[],fair:{},target:11,lv:{},md:'soc',rotationModeVersion:1,sd:0,gp:{},wt:{},liveSeq:0,ws:false,wl:2,eq:false,tts:false,hap:true,rr:false,lr:false,lpf:false,rpf:false,courts:[1,2,3,4].map(id=>({id,name:'Court '+id,isActive:false,players:[],score:[0,0],mid:'',t:0}))});
 let S=mk(),V=null,SV=null,RA=null;
 const esc=s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const num=v=>{if(typeof v!=='number'&&typeof v!=='string')return 0;const n=Number(v);return Number.isFinite(n)?n:0};
@@ -566,7 +566,7 @@ function normalizeFairnessRecords(raw){
 
 function readStoredLiveSequence(){try{const saved=JSON.parse(localStorage.getItem(K)||'null');return saved&&Number.isSafeInteger(saved.liveSeq)&&saved.liveSeq>=0?saved.liveSeq:0}catch(e){return 0}}
 function resumeLiveSequence(){S.liveSeq=Math.max(Number.isSafeInteger(S.liveSeq)&&S.liveSeq>=0?S.liveSeq:0,readStoredLiveSequence(),Date.now());return S.liveSeq}
-function load(){try{const raw=localStorage.getItem(K),s=JSON.parse(raw);if(s&&s.courts){S=s;S.log=S.log||[];S.waiting=S.waiting||[];S.rest=S.rest||{};S.fair=normalizeFairnessRecords(S.fair);S.target=S.target||11;S.lv=S.lv||{};S.md=S.md||'bal';S.sd=S.sd||0;S.gp=S.gp||{};resumeLiveSequence();S.wt=normalizeWaitTimes(S.queue||[],S.wt);S.ws=!!S.ws;S.eq=!!S.eq;S.tts=!!S.tts;S.wl=S.wl==null?2:S.wl;S.rr=!!S.rr;S.lr=!!S.lr;S.lpf=!!S.lpf;S.rpf=!!S.rpf;if(s.ended&&s.rid&&!Object.prototype.hasOwnProperty.call(s,'rr'))S.lr=true;S.courts.forEach(c=>{c.score=c.score||[0,0]})}}catch(e){}}
+function load(){try{const raw=localStorage.getItem(K),s=JSON.parse(raw);if(s&&s.courts){S=s;S.log=S.log||[];S.waiting=S.waiting||[];S.rest=S.rest||{};S.fair=normalizeFairnessRecords(S.fair);S.target=S.target||11;S.lv=S.lv||{};if(S.rotationModeVersion!==1){S.md='soc';S.ws=false;S.rotationModeVersion=1}else S.md=S.md==='soc'?'soc':'bal';S.sd=S.sd||0;S.gp=S.gp||{};resumeLiveSequence();S.wt=normalizeWaitTimes(S.queue||[],S.wt);S.ws=!!S.ws;S.eq=!!S.eq;S.tts=!!S.tts;S.wl=S.wl==null?2:S.wl;S.rr=!!S.rr;S.lr=!!S.lr;S.lpf=!!S.lpf;S.rpf=!!S.rpf;if(s.ended&&s.rid&&!Object.prototype.hasOwnProperty.call(s,'rr'))S.lr=true;S.courts.forEach(c=>{c.score=c.score||[0,0]})}}catch(e){}}
 function save(){S.liveSeq=Math.max(Number.isSafeInteger(S.liveSeq)&&S.liveSeq>=0?S.liveSeq:0,readStoredLiveSequence());try{localStorage.setItem(K,JSON.stringify(S));storageWriteSucceeded('state')}catch(e){storageWriteFailed('state')}pushS()}
 
 function toast(m,type){const d=document.createElement('div');
@@ -856,8 +856,8 @@ function cleanState(o){
   const obj=v=>v&&typeof v==='object'&&!Array.isArray(v)?v:{},clean=(src,f)=>{const o={};Object.keys(obj(src)).slice(0,2000).forEach(k=>{const v=f(src[k]);if(v)o[String(k).toLowerCase().slice(0,60)]=v});return o};
   R.rest=clean(s.rest,v=>v?1:0);
   R.lv=clean(s.lv,v=>Math.min(6,Math.max(0,Math.floor(Number(v))||0)));
-  R.md=s.md==='soc'?'soc':'bal';R.sd=Number.isFinite(+s.sd)?+s.sd:0;R.gp=clean(s.gp,v=>Math.max(0,Math.floor(Number(v))||0));R.fair=normalizeFairnessRecords(s.fair);R.wt=normalizeWaitTimes(R.queue,s.wt);
-  R.ws=!!s.ws;R.wl=[2,3,4].includes(+s.wl)?+s.wl:2;R.eq=!!s.eq;R.tts=!!s.tts;R.snd=s.snd!==false;R.hap=s.hap!==false;
+  R.md=s.rotationModeVersion===1&&s.md==='bal'?'bal':'soc';R.rotationModeVersion=1;R.sd=Number.isFinite(+s.sd)?+s.sd:0;R.gp=clean(s.gp,v=>Math.max(0,Math.floor(Number(v))||0));R.fair=normalizeFairnessRecords(s.fair);R.wt=normalizeWaitTimes(R.queue,s.wt);
+  R.ws=s.rotationModeVersion===1&&!!s.ws;R.wl=[2,3,4].includes(+s.wl)?+s.wl:2;R.eq=!!s.eq;R.tts=!!s.tts;R.snd=s.snd!==false;R.hap=s.hap!==false;
   R.target=[11,15,21].includes(+s.target)?+s.target:11;R.wb=s.wb===1?1:2;R.courts=R.courts.slice(0,Math.max(1,Math.min(8,s.courts.length)));
   R.courts=s.courts.slice(0,8).map((c,i)=>{
     const base=R.courts[i]||{id:i+1,name:'Court '+(i+1),isActive:false,players:[],score:[0,0],mid:'',t:0,hold:null,stk:0};
@@ -926,7 +926,7 @@ if(bs>0){const extra=ix.slice(4,8),base=best.slice();
 for(let e=0;e<extra.length;e++)for(const p of [3,2]){const t=base.slice();t[p]=extra[e];const s=rep4(t.map(i=>S.queue[i]));if(s<bs){bs=s;best=t}}}
 return best.sort((a,b)=>a-b)}
 function takeNext(){const ix=pick4(),nm4=ix.map(i=>S.queue[i]),t=split4(nm4);recordRotationSelection(nm4);for(let k=ix.length-1;k>=0;k--)S.queue.splice(ix[k],1);nm4.forEach(gpi);clearWaiting(nm4);S.sd++;return t}
-function smd(m){S.md=m;save();render()}
+function smd(m){S.md=m==='soc'?'soc':'bal';S.rotationModeVersion=1;save();render()}
 function tws(){S.ws=!S.ws;save();render()}
 function teq(){S.eq=!S.eq;save();render()}
 function swl(v){S.wl=v;save();render()}

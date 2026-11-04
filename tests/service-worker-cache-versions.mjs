@@ -19,10 +19,10 @@ for(const item of allocations){
   assert.match(item.cache,/^queuezerotwo-v[1-9][0-9]*$/,'Cache names use the numeric QueueZeroTwo version format');
 }
 const versions=allocations.map(x=>Number(x.cache.match(/v([0-9]+)$/)[1])).sort((a,b)=>a-b);
-assert.deepEqual(versions,Array.from({length:36},(_,i)=>i+1),'Historical and reserved cache versions must remain contiguous and unique');
+assert.deepEqual(versions,Array.from({length:37},(_,i)=>i+1),'Historical and reserved cache versions must remain contiguous and unique');
 const reservations=allocations.filter(x=>x.status==='reserved'||x.status==='assigned').map(x=>({version:Number(x.cache.match(/v([0-9]+)$/)[1]),pr:x.pr,status:x.status}));
 assert.deepEqual(reservations,[
-  {version:36,pr:68,status:'reserved'}
+  {version:37,pr:69,status:'reserved'}
 ],'PR #63 v32, PR #65 v33, PR #66 v34, and PR #67 v35 are released; PR #68 reserves v36');
 const released30=allocations.find(x=>x.cache==='queuezerotwo-v30');
 assert.equal(released30?.status,'released','PR #61 v30 is merged before this PR rebases');
@@ -44,5 +44,9 @@ const released35=allocations.find(x=>x.cache==='queuezerotwo-v35');
 assert.equal(released35?.status,'released','PR #67 v35 is merged before this PR rebases');
 assert.equal(released35?.pr,67);
 assert.equal(released35?.merge_commit_sha,'33d89273f9bb917ea5c4f0ce3b2d0314de4aee34');
-assert.equal(manifest.releaseOrder.join(','),'61,62,63,65,66,67,68');
-console.log(JSON.stringify({pass:true,currentCache:match[1],released:35,reserved:1,assigned:0,uniqueCacheNames:names.length},null,2));
+const released36=allocations.find(x=>x.cache==='queuezerotwo-v36');
+assert.equal(released36?.status,'released','PR #68 v36 is merged before this PR rebases');
+assert.equal(released36?.pr,68);
+assert.equal(released36?.merge_commit_sha,'a6fa47d5dcff6aaead3bfe8e03ca11be3fea8a43');
+assert.equal(manifest.releaseOrder.join(','),'61,62,63,65,66,67,68,69');
+console.log(JSON.stringify({pass:true,currentCache:match[1],released:36,reserved:1,assigned:0,uniqueCacheNames:names.length},null,2));
