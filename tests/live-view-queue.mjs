@@ -107,6 +107,25 @@ function makePicker(state) {
   assert.ok(result.every(x=>x.etaMs===0));
 }
 
+// Partner look-ahead can select players deeper in the stack. Those exact
+// Up Next players must share the first court's ETA instead of their raw rank.
+{
+  const now = 1_800_000_000_000;
+  const queue = Array.from({length:8},(_,i)=>'P'+i);
+  const result = projection(
+    queue,
+    queue.map((_,i)=>i),
+    [{a:true,t:now-20*60_000}],
+    30*60_000,
+    now,
+    [0,1,6,7]
+  );
+  assert.deepEqual(result.map(x=>x.etaMs),[
+    10*60_000,10*60_000,40*60_000,40*60_000,
+    40*60_000,40*60_000,10*60_000,10*60_000
+  ]);
+}
+
 // No history means no invented minute estimate, but resting state still works.
 {
   const result = projection(['A','B','C'],[0,2],[
@@ -189,7 +208,7 @@ function makePicker(state) {
 assert.match(html,/ei=S\.eq\?eligibleQueueIndexes\(\):null/);
 assert.match(html,/ri=S\.eq\?\[\]:q\.map/);
 assert.match(html,/t:c\.isActive\?Number\(c\.t\)\|\|0:0/);
-assert.match(html,/liveQueueProjection\(queueData,d\.ei,courtsData/);
+assert.match(html,/liveQueueProjection\(queueData,d\.ei,courtsData/);\nassert.match(html,/UP NEXT/);
 assert.match(html,/RESTING · SKIPPED/);
 assert.match(html,/Eligible #/);
 
