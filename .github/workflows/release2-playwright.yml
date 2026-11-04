@@ -72,6 +72,8 @@ jobs:
           node --check /tmp/queuezerotwo-inline.js
       - name: Test partner rotation logic
         run: node tests/partner-rotation.mjs
+      - name: Test rest-aware Live View queue and wait estimates
+        run: node tests/live-view-queue.mjs
       - name: Verify live Production alias matches current main
         shell: bash
         run: bash tests/production-serving-check.sh
