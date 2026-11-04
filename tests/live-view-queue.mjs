@@ -41,8 +41,8 @@ function makePicker(state) {
 // Resting players are omitted from eligibility without moving their stored
 // queue positions. Physical positions remain separate from eligible positions.
 {
-  const queue = ['Ana','Ben','Cara','Dan','Eli','Fay','Gus','Hana','Ivan'];
-  const eligible = [0,2,4,5,7,8];
+  const queue = ['Ana','Ben','Cara','Dan','Eli','Resting','Fay','Gus','Hana','Ivan','Jack'];
+  const eligible = [0,2,4,6,7,8,9,10];
   const now = 1_800_000_000_000;
   const avg = 30 * 60_000;
   const courts = [
@@ -51,32 +51,32 @@ function makePicker(state) {
     {n:'Court 3',a:false,t:0},                // free now
   ];
   const result = projection(queue,eligible,courts,avg,now);
-  assert.deepEqual(result.map(x=>x.position),[1,2,3,4,5,6,7,8,9]);
+  assert.deepEqual(result.map(x=>x.position),[1,2,3,4,5,6,7,8,9,10,11]);
   assert.equal(result[1].resting,true);
   assert.equal(result[3].resting,true);
-  assert.equal(result[6].resting,true);
+  assert.equal(result[5].resting,true);
   assert.equal(result[0].eligiblePosition,1);
   assert.equal(result[2].eligiblePosition,2);
-  assert.equal(result[8].eligiblePosition,6);
+  assert.equal(result[10].eligiblePosition,8);
   assert.equal(result[0].etaMs,0);
   assert.equal(result[2].etaMs,0);
   assert.equal(result[4].etaMs,0);
-  assert.equal(result[5].etaMs,0);
+  assert.equal(result[6].etaMs,0);
   assert.equal(result[7].etaMs,10 * 60_000);
-  assert.equal(result[8].etaMs,10 * 60_000);
+  assert.equal(result[10].etaMs,10 * 60_000);
 
   // Removing the resting rows entirely produces the same ETA sequence:
   // resting players do not consume one of the four-player call groups.
   const compact = projection(
-    ['Ana','Cara','Eli','Fay','Hana','Ivan'],
-    [0,1,2,3,4,5],
+    ['Ana','Cara','Eli','Fay','Gus','Hana','Ivan','Jack'],
+    [0,1,2,3,4,5,6,7],
     courts,
     avg,
     now
   );
   assert.deepEqual(
     compact.map(x=>x.etaMs),
-    [0,0,0,0,10*60_000,10*60_000]
+    [0,0,0,0,10*60_000,10*60_000,10*60_000,10*60_000]
   );
 }
 
