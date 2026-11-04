@@ -15,7 +15,7 @@ Live: https://queuezerotwo.vercel.app
 - **Players:** all-time player profiles with skill levels, match history, partner statistics, per-player backup and restore, and optional local avatars. Avatar images are cropped and resized on this device and are not uploaded to Supabase.
 - **Backup:** Export and Import the whole session as JSON. Imports are validated and size-limited.
 - **On court:** large score controls, haptics, sound, voice announcements, wake lock during matches, and light/dark themes.
-- **Live View:** a read-only page for players to follow courts, queue positions, estimated waits, Up Next, the stack, the leaderboard, and finished-results snapshots.
+- **Live View:** a read-only page for players to follow courts, Up Next, queue positions, and the leaderboard. The stack shows physical and eligible positions separately, marks resting players as skipped, and estimates wait using open courts, active match start times, and recent match duration. Estimates are advisory, not guarantees.
 - **Host handoff:** transfer Live View hosting to another device with a QR code.
 - **Offline/PWA:** service worker caching with an update-ready prompt and installable PWA metadata. Live session writes use a durable offline queue and retry after connectivity returns; finished-results entries are retained separately from replaceable live-state snapshots.
 
@@ -67,6 +67,7 @@ The real-device workflow is `.github/workflows/real-device-release1.yml`. Its no
 ## Development
 
 - **Pairing unit test:** `npm run test:pairing` checks the partner-avoidance logic with no browser needed.
+- **Live View queue test:** `npm run test:live-view` checks resting-player exclusion, Equal Sit-outs order, multiple-court ETAs, partner look-ahead and legacy payload compatibility without a browser.
 - **Tests:** there is no `npm test` script. The real browser regression is `.github/workflows/release2-playwright.yml`. Locally, run `npm ci`, `npm run build:css`, `npx playwright install chromium`, start a static server on port 4173, then run `APP_URL=http://127.0.0.1:4173/ node tests/release2b-sessions.mjs`. CI also checks the main inline JavaScript with `node --check`.
 - **Production deploys:** only `main` deploys to production. Vercel's ignored build step skips every other branch.
 - **Deployment quota:** production deploys count against Vercel's daily limit, so batch unrelated changes into one real PR when practical.
