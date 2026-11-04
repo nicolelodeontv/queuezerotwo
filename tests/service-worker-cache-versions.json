@@ -11,10 +11,11 @@
     69,
     70,
     71,
-    72
+    72,
+    73
   ],
-  "currentBranch": "feat/rest-aware-live-view",
-  "currentCache": "queuezerotwo-v40",
+  "currentBranch": "feature/progressive-post-game-reshuffle",
+  "currentCache": "queuezerotwo-v41",
   "allocations": [
     {
       "cache": "queuezerotwo-v1",
@@ -233,9 +234,15 @@
     },
     {
       "cache": "queuezerotwo-v40",
-      "status": "reserved",
+      "status": "released",
       "pr": 72,
-      "branch": "feat/rest-aware-live-view"
+      "merge_commit_sha": "0dcc7851f457277430cfc1ff4a795afae07282e1"
+    },
+    {
+      "cache": "queuezerotwo-v41",
+      "status": "reserved",
+      "pr": 73,
+      "branch": "feature/progressive-post-game-reshuffle"
     }
   ]
 }
