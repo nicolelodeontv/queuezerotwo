@@ -17,7 +17,7 @@ try{
  const result=await page.evaluate(()=>{
   S=mk();
   S.name='Saturday Open Play';
-  S.fair={a:{sitouts:2},b:{sitouts:1}};
+  S.fair={ava:{sitouts:2},ben:{sitouts:1}};
   S.log=[
    {c:'Court 1',p:['Ava','Ben','Cara','Drew'],s:[11,8],w:0,t:1760000000000,d:600000},
    {c:'Court 2',p:['Ava','Cara','Ben','Drew'],s:[7,11],w:1,t:1760000600000,d:720000},
