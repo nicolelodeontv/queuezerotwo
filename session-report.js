@@ -84,7 +84,7 @@
       if(!box.querySelector('#sn')||box.querySelector('.session-report-open'))continue;
       const backup=box.querySelector('.rb');if(!backup)continue;
       const button=document.createElement('button');
-      button.type='button';button.className='session-report-open col-span-2 px-4 py-3 rounded-xl bg-dark-700 hover:bg-dark-900 border border-dark-700 text-gray-200';
+      button.type='button';button.className='session-report-open px-4 py-3 rounded-xl bg-dark-700 hover:bg-dark-900 border border-dark-700 text-gray-200';
       button.innerHTML='<i class="fa-solid fa-chart-column"></i> Session summary & player stats';
       button.addEventListener('click',openSessionReport);
       backup.parentElement.insertBefore(button,backup);
