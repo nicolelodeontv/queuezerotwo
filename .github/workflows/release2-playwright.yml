@@ -125,6 +125,12 @@ jobs:
         env:
           APP_URL: http://127.0.0.1:4173/
         run: node tests/responsive-viewport-sweep.mjs
+      - name: Check Next-Up preview and mobile test syntax
+        run: node --check tests/next-up-preview-mobile.mjs
+      - name: Test Next-Up preview and mobile responsiveness
+        env:
+          APP_URL: http://127.0.0.1:4173/
+        run: node tests/next-up-preview-mobile.mjs
       - name: Check 320px light/dark visual test syntax
         run: node --check tests/responsive-320-themes.mjs
       - name: Run 320px light/dark menu and layout checks
