@@ -30,9 +30,9 @@ try {
       const setup=await page.evaluate(()=>{
         localStorage.clear();
         S=mk();
-        S.queue=Array.from({length:24},(_,i)=>i===4?'AlexandriaVeryLongPickleballPlayerName':'Player '+String(i+1).padStart(2,'0'));
+        S.queue=['Ava','Ben','Cara','Drew','AlexandriaVeryLongPickleballPlayerName','Finn','Gia','Hugo','Iris','Jude','Kai','Luna','Milo','Nina','Omar','Pia','Quinn','Rae','Sage','Theo','Uma','Vik','Wren','Zane'];
         S.waiting=[];
-        S.rest={'player 06':1,'player 13':1,'player 20':1};
+        S.rest={finn:1,nina:1,uma:1};
         S.wt=normalizeWaitTimes(S.queue,{});
         S.eq=false;
         S.ws=false;
@@ -78,7 +78,7 @@ try {
       );
       assert.deepEqual(setup.payload.fg.map(g=>g.n),[2,3]);
       assert.equal(setup.payload.nx.length,4,'the current Up Next group remains separate from future groups');
-      for(const resting of ['Player 06','Player 13','Player 20']){
+      for(const resting of ['Finn','Nina','Uma']){
         assert.ok(!setup.payload.fg.some(g=>g.t.includes(resting)),resting+' must be skipped from every future group');
       }
 
@@ -99,7 +99,7 @@ try {
       }
       const restNote=await page.locator('#liveFollowingGroups').innerText();
       assert.match(restNote,/Resting · skipped \(3\)/);
-      for(const resting of ['Player 06','Player 13','Player 20'])assert.ok(restNote.includes(resting));
+      for(const resting of ['Finn','Nina','Uma'])assert.ok(restNote.includes(resting));
 
       // Check narrow and wide layouts, with long names in the forecast.
       for(const width of VIEWPORTS){
@@ -135,7 +135,7 @@ try {
         render();
         return {payload,expected};
       });
-      assert.ok(!equal.payload.nx.includes('Player 01'),'Equal Sit-outs should prioritize players with fewer games for the current call');
+      assert.ok(!equal.payload.nx.includes('Ava'),'Equal Sit-outs should prioritize players with fewer games for the current call');
       assert.deepEqual(equal.payload.fg.map(g=>g.t),equal.expected.map(g=>g.teams));
       assert.equal(await cards.count(),2);
 
