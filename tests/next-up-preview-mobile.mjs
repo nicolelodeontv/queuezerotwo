@@ -81,6 +81,28 @@ try {
       const equalReason=await page.locator('#qpreviewReason').innerText();
       assert.match(equalReason,/Equal sit-outs is on/);
 
+      // Exercise the actual Stack and Stats tabs at the narrowest supported width.
+      await page.setViewportSize({width:320,height:740});
+      await page.locator('#nvs').click();
+      await page.locator('#sstk').waitFor({state:'visible'});
+      const stackMetrics=await page.evaluate(()=>({
+        root:document.documentElement.scrollWidth,
+        body:document.body.scrollWidth,
+        panel:document.querySelector('#sstk').getBoundingClientRect().right,
+        rows:[...document.querySelectorAll('#ql li')].map(el=>el.getBoundingClientRect().right),
+      }));
+      assert.ok(stackMetrics.root<=321&&stackMetrics.body<=321,'320px Stack tab overflow: '+JSON.stringify(stackMetrics));
+      assert.ok(stackMetrics.panel<=321,'320px Stack panel extends beyond viewport');
+      assert.ok(stackMetrics.rows.every(right=>right<=321),'320px player row extends beyond viewport');
+      await page.locator('#nvt').click();
+      const statsMetrics=await page.evaluate(()=>({
+        root:document.documentElement.scrollWidth,
+        body:document.body.scrollWidth,
+      }));
+      assert.ok(statsMetrics.root<=321&&statsMetrics.body<=321,'320px Stats tab overflow: '+JSON.stringify(statsMetrics));
+      await page.locator('#nvp').click();
+      await page.locator('#qpreview').waitFor({state:'visible'});
+
       for(const [width,height] of VIEWPORTS){
         await page.setViewportSize({width,height});
         await page.evaluate(()=>new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve))));
