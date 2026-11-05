@@ -100,7 +100,7 @@ async function simulateOldCacheToV41(browser,oldVersion) {
   // Prevent real session writes in this cache-upgrade test while allowing the
   // app to remain online so 127.0.0.1 navigation still works without SW fallback.
   await context.route(SUPABASE+'/**',route=>route.abort());
-  await page.goto(APP,{waitUntil:'networkidle'});
+  await page.goto(APP,{waitUntil:'domcontentloaded'});
   await page.waitForFunction(()=>!!navigator.serviceWorker?.controller,null,{timeout:5000});
   await page.evaluate(()=>{
     localStorage.setItem('pickleStackState',JSON.stringify({courts:[{id:1,name:'Court 1',isActive:false,players:[],score:[0,0],mid:'',t:0}],queue:['Persisted player'],waiting:[],rest:{},log:[],target:11,lv:{},md:'bal',sd:0,gp:{},wt:{},ws:false,wl:2,eq:false,tts:false,hap:true,sid:'PERSISTEDSID',sh:'a'.repeat(64)}));
@@ -121,7 +121,7 @@ async function simulateOldCacheToV41(browser,oldVersion) {
   },null,{timeout:10000});
   // The aborted Supabase request must settle before the startup-resume timer
   // fires, leaving one pending state item for queue coalescing to replace.
-  await page.reload({waitUntil:'networkidle'});
+  await page.reload({waitUntil:'domcontentloaded'});
   await page.waitForFunction(()=>{
     const q=JSON.parse(localStorage.getItem('queuezerotwo-publish-queue-v1')||'{"items":[]}').items;
     return q.length===1&&Number.isSafeInteger(q[0]?.payload?.seq);
