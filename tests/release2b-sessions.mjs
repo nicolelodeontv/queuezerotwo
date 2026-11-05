@@ -184,7 +184,7 @@ async function finishLogWinnerSelectionRegression(browser) {
       window.__earlyFinishLiveOriginalRpc=sb.rpc.bind(sb);
     });
 
-    await seed([1,0]);
+    await seed([1,0],{queue:['Waiting 1','Waiting 2']});
     let dialog=await openPrompt();
     assert.match(await dialog.innerText(),/Court 1 · 1-0/i);
     assert.match(await dialog.locator('[data-w="0"]').innerText(),/Team 1/i);
@@ -201,16 +201,19 @@ async function finishLogWinnerSelectionRegression(browser) {
     assert.deepEqual(result.score,[1,0]);
     assert.equal(result.active,false);
     assert.deepEqual(result.wins,['Alpha','Beta']);
-    assert.deepEqual(result.queue,['Alpha','Beta','Gamma','Delta']);
+    assert.deepEqual(result.queue,['Waiting 1','Waiting 2','Beta','Gamma','Delta','Alpha'],
+      'Existing waiters stay ahead; the completed group returns with a one-seat rotation');
 
     // A chosen winner may contradict the score, for example after a forfeit.
     await seed([1,0]);
     dialog=await openPrompt();
     await dialog.locator('[data-w="1"]').click();
     await dialog.waitFor({state:'detached'});
-    result=await page.evaluate(()=>({winner:S.log[0]?.w,wins:stats().filter(x=>x.w>0).map(x=>x.n).sort()}));
+    result=await page.evaluate(()=>({winner:S.log[0]?.w,wins:stats().filter(x=>x.w>0).map(x=>x.n).sort(),queue:S.queue.slice()}));
     assert.equal(result.winner,1);
     assert.deepEqual(result.wins,['Delta','Gamma']);
+    assert.deepEqual(result.queue,['Delta','Alpha','Beta','Gamma'],
+      'Choosing Team 2 still rotates all four returning players');
 
     // Keep the historical unscored result behavior.
     await seed([7,3]);
@@ -284,7 +287,7 @@ async function finishLogWinnerSelectionRegression(browser) {
       log:S.log.length,winner:S.log[0]?.w,score:S.log[0]?.s,
       active:S.courts[0].isActive,queue:S.queue.slice()
     }));
-    assert.deepEqual(result,{log:1,winner:0,score:[0,0],active:false,queue:['Alpha','Beta','Gamma','Delta']});
+    assert.deepEqual(result,{log:1,winner:0,score:[0,0],active:false,queue:['Beta','Gamma','Delta','Alpha']});
 
     // Winners Stay applies the selected winner even when the score disagrees.
     await seed([1,0],{ws:true,queue:['Echo','Foxtrot','Hotel','India']});
