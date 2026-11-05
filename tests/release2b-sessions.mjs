@@ -86,12 +86,12 @@ async function finishAndChoose(page,winner=0) {
   await dialog.waitFor({state:'detached'});
 }
 
-async function simulateOldCacheToV40(browser,oldVersion) {
+async function simulateOldCacheToV41(browser,oldVersion) {
   const context = await browser.newContext({...devices['Desktop Chrome'],serviceWorkers:'allow',locale:'en-US'});
   const page = await context.newPage();
   let swFetch = 0;
   const currentSw = fs.readFileSync(path.resolve('sw.js'), 'utf8');
-  assert.match(currentSw,/queuezerotwo-v40/);
+  assert.match(currentSw,/queuezerotwo-v41/);
   const oldSw = `const V='queuezerotwo-v${oldVersion}';self.addEventListener('install',e=>e.waitUntil(caches.open(V).then(c=>c.put('/__queuezerotwo_v${oldVersion}_sentinel__',new Response('v${oldVersion}'))).then(()=>self.skipWaiting())));self.addEventListener('activate',e=>e.waitUntil(self.clients.claim()));`;
   await context.route('**/sw.js', async route => {
     swFetch++;
@@ -100,7 +100,7 @@ async function simulateOldCacheToV40(browser,oldVersion) {
   // Prevent real session writes in this cache-upgrade test while allowing the
   // app to remain online so 127.0.0.1 navigation still works without SW fallback.
   await context.route(SUPABASE+'/**',route=>route.abort());
-  await page.goto(APP,{waitUntil:'networkidle'});
+  await page.goto(APP,{waitUntil:'domcontentloaded'});
   await page.waitForFunction(()=>!!navigator.serviceWorker?.controller,null,{timeout:5000});
   await page.evaluate(()=>{
     localStorage.setItem('pickleStackState',JSON.stringify({courts:[{id:1,name:'Court 1',isActive:false,players:[],score:[0,0],mid:'',t:0}],queue:['Persisted player'],waiting:[],rest:{},log:[],target:11,lv:{},md:'bal',sd:0,gp:{},wt:{},ws:false,wl:2,eq:false,tts:false,hap:true,sid:'PERSISTEDSID',sh:'a'.repeat(64)}));
@@ -109,7 +109,7 @@ async function simulateOldCacheToV40(browser,oldVersion) {
   await page.evaluate(async()=>{const r=await navigator.serviceWorker.getRegistration();await r.update()});
   await page.waitForFunction(async()=>{
     const r=await navigator.serviceWorker.getRegistration();
-    return !!r?.waiting || await caches.has('queuezerotwo-v40');
+    return !!r?.waiting || await caches.has('queuezerotwo-v41');
   },null,{timeout:10000});
   await page.evaluate(async()=>{
     const r=await navigator.serviceWorker.getRegistration();
@@ -117,17 +117,17 @@ async function simulateOldCacheToV40(browser,oldVersion) {
   });
   await page.waitForFunction(async()=>{
     const r=await navigator.serviceWorker.getRegistration();
-    return !!r && !r.waiting && r.active?.state==='activated' && await caches.has('queuezerotwo-v40');
+    return !!r && !r.waiting && r.active?.state==='activated' && await caches.has('queuezerotwo-v41');
   },null,{timeout:10000});
   // The aborted Supabase request must settle before the startup-resume timer
   // fires, leaving one pending state item for queue coalescing to replace.
-  await page.reload({waitUntil:'networkidle'});
+  await page.reload({waitUntil:'domcontentloaded'});
   await page.waitForFunction(()=>{
     const q=JSON.parse(localStorage.getItem('queuezerotwo-publish-queue-v1')||'{"items":[]}').items;
     return q.length===1&&Number.isSafeInteger(q[0]?.payload?.seq);
   },null,{timeout:5000});
   const out=await page.evaluate(async(oldVersion)=>{
-    const cache=await caches.open('queuezerotwo-v40');
+    const cache=await caches.open('queuezerotwo-v41');
     return {
       queue:JSON.parse(localStorage.getItem('queuezerotwo-publish-queue-v1')||'{"items":[]}').items,
       state:JSON.parse(localStorage.getItem('pickleStackState')||'{}'),
@@ -184,7 +184,7 @@ async function finishLogWinnerSelectionRegression(browser) {
       window.__earlyFinishLiveOriginalRpc=sb.rpc.bind(sb);
     });
 
-    await seed([1,0]);
+    await seed([1,0],{queue:['Waiting 1','Waiting 2']});
     let dialog=await openPrompt();
     assert.match(await dialog.innerText(),/Court 1 · 1-0/i);
     assert.match(await dialog.locator('[data-w="0"]').innerText(),/Team 1/i);
@@ -201,16 +201,19 @@ async function finishLogWinnerSelectionRegression(browser) {
     assert.deepEqual(result.score,[1,0]);
     assert.equal(result.active,false);
     assert.deepEqual(result.wins,['Alpha','Beta']);
-    assert.deepEqual(result.queue,['Alpha','Beta','Gamma','Delta']);
+    assert.deepEqual(result.queue,['Waiting 1','Waiting 2','Beta','Gamma','Delta','Alpha'],
+      'Existing waiters stay ahead; the completed group returns with a one-seat rotation');
 
     // A chosen winner may contradict the score, for example after a forfeit.
     await seed([1,0]);
     dialog=await openPrompt();
     await dialog.locator('[data-w="1"]').click();
     await dialog.waitFor({state:'detached'});
-    result=await page.evaluate(()=>({winner:S.log[0]?.w,wins:stats().filter(x=>x.w>0).map(x=>x.n).sort()}));
+    result=await page.evaluate(()=>({winner:S.log[0]?.w,wins:stats().filter(x=>x.w>0).map(x=>x.n).sort(),queue:S.queue.slice()}));
     assert.equal(result.winner,1);
     assert.deepEqual(result.wins,['Delta','Gamma']);
+    assert.deepEqual(result.queue,['Delta','Alpha','Beta','Gamma'],
+      'Choosing Team 2 still rotates all four returning players');
 
     // Keep the historical unscored result behavior.
     await seed([7,3]);
@@ -284,7 +287,7 @@ async function finishLogWinnerSelectionRegression(browser) {
       log:S.log.length,winner:S.log[0]?.w,score:S.log[0]?.s,
       active:S.courts[0].isActive,queue:S.queue.slice()
     }));
-    assert.deepEqual(result,{log:1,winner:0,score:[0,0],active:false,queue:['Alpha','Beta','Gamma','Delta']});
+    assert.deepEqual(result,{log:1,winner:0,score:[0,0],active:false,queue:['Beta','Gamma','Delta','Alpha']});
 
     // Winners Stay applies the selected winner even when the score disagrees.
     await seed([1,0],{ws:true,queue:['Echo','Foxtrot','Hotel','India']});
@@ -844,8 +847,8 @@ async function main() {
   await Promise.all([desktop,iphone,pixel].map(context=>context.tracing.start({screenshots:true,snapshots:true,sources:true})));
   const syncPublishes = [];
   const resultPublishes = [];
-  for(let oldVersion=1;oldVersion<=39;oldVersion++){
-    await simulateOldCacheToV40(browser,oldVersion);
+  for(let oldVersion=1;oldVersion<=40;oldVersion++){
+    await simulateOldCacheToV41(browser,oldVersion);
   }
   await finishLogWinnerSelectionRegression(browser);
   await mobileEarlyFinishUndoRegression(browser);
@@ -2082,7 +2085,7 @@ async function main() {
       hostileImportedSessionNameSafe: true,
       resultsQrResponsiveAndShareImage: true,
       resultsBackupRestoresNameAndMatchLog: true,
-      serviceWorkerV1ToV39UpgradeToV40: true,
+      serviceWorkerV1ToV40UpgradeToV41: true,
       finishLogWinnerSelection: true,
       mobileEarlyFinishUndo: true,
       deleteWorks: true,
