@@ -69,6 +69,7 @@ The real-device workflow is `.github/workflows/real-device-release1.yml`. Its no
 
 - **Pairing unit test:** `npm run test:pairing` checks the partner-avoidance logic with no browser needed.
 - **Live View queue test:** `npm run test:live-view` checks resting-player exclusion, Equal Sit-outs order, multiple-court ETAs, partner look-ahead and legacy payload compatibility without a browser.
+- **Live View following-groups test:** `npm run test:live-view-preview` checks that shared viewers receive the host's two future groups, rest-aware selection, Winners Stay messaging, legacy payloads, and mobile/desktop layout.
 - **Tests:** there is no `npm test` script. The real browser regression is `.github/workflows/release2-playwright.yml`. Locally, run `npm ci`, `npm run build:css`, `npx playwright install chromium`, start a static server on port 4173, then run `APP_URL=http://127.0.0.1:4173/ node tests/release2b-sessions.mjs`. CI also checks the main inline JavaScript with `node --check`.
 - **Production deploys:** only `main` deploys to production. Vercel's ignored build step skips every other branch.
 - **Deployment quota:** production deploys count against Vercel's daily limit, so batch unrelated changes into one real PR when practical.
