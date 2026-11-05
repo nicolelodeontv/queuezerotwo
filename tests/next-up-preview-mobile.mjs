@@ -80,6 +80,22 @@ try {
       });
       const equalReason=await page.locator('#qpreviewReason').innerText();
       assert.match(equalReason,/Equal sit-outs is on/);
+      await page.evaluate(()=>{
+        S.ws=true;
+        render();
+      });
+      const winnersStay=await page.evaluate(()=>({
+        groups:document.querySelectorAll('#qpreviewGroups .qpreview-group').length,
+        previewText:document.querySelector('#qpreviewGroups')?.innerText||'',
+        reason:document.querySelector('#qpreviewReason')?.innerText||'',
+      }));
+      assert.equal(winnersStay.groups,0,'Winners Stay must not imply normal four-player groups');
+      assert.match(winnersStay.previewText,/next two eligible players challenge/i);
+      assert.match(winnersStay.reason,/Winners Stay is on/);
+      await page.evaluate(()=>{
+        S.ws=false;
+        render();
+      });
 
       // Exercise the actual Stack and Stats tabs at the narrowest supported width.
       await page.setViewportSize({width:320,height:740});
