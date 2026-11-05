@@ -192,6 +192,22 @@ html[data-theme=light]{color-scheme:light}
 [data-theme=light] .lb-podium-1 td:first-child{border-left-color:#65a30d}
 [data-theme=light] .lb-podium-2 td:first-child{border-left-color:#64748b}
 [data-theme=light] .lb-podium-3 td:first-child{border-left-color:#b45309}
+
+/* Next-up preview: keep long player names and team cards inside narrow screens. */
+#qpreview .qpreview-group,#qpreview .qpreview-team{min-width:0;max-width:100%}
+#qpreview .qpreview-player,.up-next-player{min-width:0;overflow-wrap:anywhere;word-break:break-word}
+#qpreview .qpreview-team>div:last-child{min-width:0}
+@media(max-width:639px){
+  #sun{padding:.875rem}
+  #sun button{min-height:44px}
+  #sun .flex.items-center.gap-2.text-xs{gap:.375rem}
+  #qpreview{padding:.75rem}
+  #qpreviewGroups{grid-template-columns:minmax(0,1fr)!important}
+  #unxb>.grid{gap:.5rem}
+  #unxb>.grid>div{min-width:0}
+  #unxb>.grid>div>div:last-child{overflow-wrap:anywhere;word-break:break-word}
+  #rcol{row-gap:1rem}
+}
 </style>
 <link rel="stylesheet" href="/tailwind.css">
 <link rel="manifest" href="/manifest.webmanifest">
@@ -261,6 +277,16 @@ html[data-theme=light]{color-scheme:light}
 <div class="flex flex-wrap items-center gap-2 text-xs mb-3"><button id="wsb" onclick="tws()"></button><button id="eqb" onclick="teq()"></button><label id="wlw" class="text-gray-400 flex items-center gap-1">Max wins in a row <select id="wls" onchange="swl(+this.value)" class="bg-dark-900 border border-dark-700 rounded px-2 py-1 text-white"><option value="0">No limit</option><option value="2">2</option><option value="3">3</option><option value="4">4</option></select></label></div>
 <p id="wsi" class="text-xs text-gray-400 mb-4 hidden"></p>
 <div id="unxb" class="min-h-[105px]"></div>
+<div id="qpreview" class="mt-4 rounded-xl border border-dark-700 bg-dark-900/40 p-4" aria-live="polite">
+  <div class="flex flex-wrap items-center justify-between gap-2 mb-3">
+    <h3 class="text-sm font-bold uppercase tracking-wide text-white"><i class="fa-solid fa-list-ol text-pickle-500 mr-1"></i> Following groups</h3>
+    <span class="text-[11px] text-gray-400">Live queue preview</span>
+  </div>
+  <div id="qpreviewGroups" class="grid grid-cols-1 sm:grid-cols-2 gap-3"></div>
+  <p id="qpreviewReason" class="text-xs text-gray-400 mt-3"></p>
+  <div id="qpreviewRest" class="text-xs text-gray-400 mt-2"></div>
+  <p id="qpreviewNote" class="text-[11px] text-gray-500 mt-2">Forecast only. Groups update when the stack, rest status, or match history changes.</p>
+</div>
 </section>
 <section id="scr">
 <div class="flex flex-wrap justify-between items-end gap-3 mb-6">
@@ -986,6 +1012,35 @@ draw()}
 function shuf(){S.sd++;save();render()}
 function setLv(i,v){S.lv[S.queue[i].toLowerCase()]=v;save();render()}
 const lsel=i=>`<select onchange="setLv(${i},+this.value)" title="Skill level" class="bg-dark-900 border border-dark-700 rounded text-xs text-gray-300 p-1">${[0,1,2,3,4,5,6].map(v=>`<option value="${v}" ${v==lvl(S.queue[i])?'selected':''}>${v?'★'.repeat(v):'—'}</option>`).join('')}</select>`;
+function previewFollowingGroups(limit=3){
+ const live=S,following=[];
+ try{
+  S=JSON.parse(JSON.stringify(live));
+  for(let groupNo=1;groupNo<=limit;groupNo++){
+   const ix=pick4();if(ix.length<4)break;
+   const names=ix.map(i=>S.queue[i]),teams=split4(names);
+   if(groupNo>1)following.push({number:groupNo,teams});
+   for(let k=ix.length-1;k>=0;k--)S.queue.splice(ix[k],1);
+   S.sd=(Number(S.sd)||0)+1;
+  }
+ }finally{S=live}
+ return following
+}
+function renderQueuePreview(currentCount){
+ const eligible=eligibleQueueIndexes().length,resting=S.queue.filter(isRest);
+ const groups=currentCount>=4?previewFollowingGroups(3):[];
+ $('qpreviewGroups').innerHTML=groups.length?groups.map(g=>'<article class="qpreview-group rounded-lg border border-dark-700 overflow-hidden min-w-0">'
+  +'<div class="flex items-center justify-between gap-2 px-3 py-2 bg-dark-800"><b class="text-xs text-white">Group '+g.number+'</b><span class="text-[10px] text-gray-400">Next in line</span></div>'
+  +'<div class="grid grid-cols-2 gap-2 p-2">'+[[g.teams.slice(0,2),'Team 1','bg-blue-600'],[g.teams.slice(2),'Team 2','bg-orange-700']].map(([players,label,color])=>'<div class="qpreview-team rounded-md overflow-hidden min-w-0 border border-dark-700"><div class="'+color+' text-white text-[10px] font-bold px-2 py-1">'+label+'</div><div class="p-2 space-y-1">'+players.map(n=>'<div class="qpreview-player text-xs text-gray-200 leading-snug">'+esc(n)+' <span class="text-[10px] text-gray-400">'+('★'.repeat(lvl(n)))+'</span></div>').join('')+'</div></div>').join('')+'</div>'
+  +'</article>').join(''):'<p class="text-xs text-gray-400 py-2">'+(currentCount<4?'Add at least 4 available players to preview upcoming groups.':eligible<4?'No additional full group is waiting after the next call.':'Not enough eligible players for another complete group yet.')+'</p>';
+ let selectionReason;
+ if(S.eq)selectionReason='Equal sit-outs is on: players with fewer games are prioritized, then the longest wait, then stack order.';
+ else if(eligible>4)selectionReason='The first two eligible players stay fixed; the picker searches the remaining stack to reduce repeat partnerships.';
+ else selectionReason='The next group is formed from the first four eligible players in stack order.';
+ const teamReason=S.md==='bal'?'Balanced mode uses skill ratings when splitting teams and still considers partner history.':'Social Mix prioritizes fresh partners and spreads opponents where possible.';
+ $('qpreviewReason').textContent='Why this pick? '+selectionReason+' '+teamReason;
+ $('qpreviewRest').innerHTML=resting.length?'<span class="text-orange-400 font-semibold">Resting · skipped ('+resting.length+'):</span> '+resting.map(esc).join(', '):'<span class="text-green-400 font-semibold">Resting:</span> Nobody. All checked-in players are eligible.';
+}
 function renderNext(){const q=S.queue;
 $('mdb').className='px-3 py-1.5 rounded-lg border '+(S.md=='bal'?'bg-pickle-500 text-dark-900 border-pickle-500 font-semibold':'border-dark-700 text-gray-300');
 $('mds').className='px-3 py-1.5 rounded-lg border '+(S.md=='soc'?'bg-pickle-500 text-dark-900 border-pickle-500 font-semibold':'border-dark-700 text-gray-300');
@@ -996,11 +1051,13 @@ $('wlw').classList.toggle('hidden',!S.ws);$('wls').value=String(S.wl);
 const wi=(S.ws?'Winners keep their court and the next two players challenge them. '+(S.wl?'After '+S.wl+' wins in a row the pair splits up and goes to the back. ':''):'')+(S.eq?'Equal sit-outs: fewest games first → longest wait → stack order.':'');
 $('wsi').textContent=wi;$('wsi').classList.toggle('hidden',!wi);
 $('mdi').innerHTML=S.md=='bal'
-?'<b class="text-gray-200">Balanced:</b> evens out teams by skill rating and avoids repeating the same partners when possible. Set stars on players for best results.'
-:'<b class="text-gray-200">Social mix:</b> rotates partners before repeating, then spreads opponents as fairly as possible. Ratings are not used.';
-const ix=pick4();if(ix.length<4){$('unxb').innerHTML='<p class="text-sm text-gray-400">Add at least 4 players to see the next teams.</p>';return}
+ ?'<b class="text-gray-200">Balanced:</b> evens out teams by skill rating and avoids repeating the same partners when possible. Set stars on players for best results.'
+ :'<b class="text-gray-200">Social mix:</b> rotates partners before repeating, then spreads opponents as fairly as possible. Ratings are not used.';
+const ix=pick4();if(ix.length<4){$('unxb').innerHTML='<p class="text-sm text-gray-400">Add at least 4 players to see the next teams.</p>';renderQueuePreview(ix.length);return}
 const t=split4(ix.map(i=>q[i]));
-$('unxb').innerHTML='<div class="grid grid-cols-2 gap-3">'+[[t.slice(0,2),'Team 1','bg-blue-600','bg-blue-500/10'],[t.slice(2),'Team 2','bg-orange-700','bg-orange-500/10']].map(([p,l,h,b])=>`<div class="rounded-xl overflow-hidden border border-dark-700"><div class="${h} text-white text-xs font-bold px-3 py-1.5">${l}</div><div class="${b} p-3 space-y-1">${p.map(n=>`<div>${esc(n)} <span class="text-xs text-gray-400">${'★'.repeat(lvl(n))}</span></div>`).join('')}</div></div>`).join('')+'</div>'}
+$('unxb').innerHTML='<div class="grid grid-cols-2 gap-3">'+[[t.slice(0,2),'Team 1','bg-blue-600','bg-blue-500/10'],[t.slice(2),'Team 2','bg-orange-700','bg-orange-500/10']].map(([p,l,h,b])=>'<div class="rounded-xl overflow-hidden border border-dark-700 min-w-0"><div class="'+h+' text-white text-xs font-bold px-3 py-1.5">'+l+'</div><div class="'+b+' p-3 space-y-1">'+p.map(n=>'<div class="up-next-player">'+esc(n)+' <span class="text-xs text-gray-400">'+('★'.repeat(lvl(n)))+'</span></div>').join('')+'</div></div>').join('')+'</div>';
+renderQueuePreview(ix.length)
+}
 function renderQueue(){const ix=pick4();$('qc').textContent=S.queue.length;$('nvc').textContent=S.queue.length;$('qe').style.display=S.queue.length?'none':'flex';$('dm').style.display=S.queue.length||S.waiting.length||S.log.length?'none':'block';
 $('ql').innerHTML=S.queue.map((p,i)=>`<li class="flex items-center justify-between p-3 rounded-xl border ${isRest(p)?'opacity-50 ':''}${ix.includes(i)?'border-pickle-500/50 bg-pickle-500/10':'border-dark-700 bg-dark-900'}"><div class="flex items-center gap-2 min-w-0"><span class="dg w-6 h-8 flex flex-none items-center justify-center text-gray-400 hover:text-pickle-500 cursor-grab" style="touch-action:none" title="Drag to reorder" tabindex="0" role="button" aria-keyshortcuts="ArrowUp ArrowDown" aria-label="Reorder ${esc(p)}, position ${i+1}. Use Arrow Up or Arrow Down to move."><i class="fa-solid fa-grip-vertical"></i></span><span class="w-6 h-6 rounded-full flex flex-none items-center justify-center text-xs font-bold ${ix.includes(i)?'text-pickle-400 bg-pickle-500/20':'text-gray-400 bg-dark-700'}">${i+1}</span><span class="truncate">${esc(p)}</span>${isRest(p)?'<span class="text-[10px] text-gray-400 border border-dark-700 rounded px-1.5">RESTING</span>':''}</div><div class="flex items-center gap-1">${lsel(i)}<button onclick="rest(${i})" title="${isRest(p)?'Back in':'Rest'}" class="w-8 h-8 ${isRest(p)?'text-pickle-500':'text-gray-400 hover:text-pickle-500'}"><i class="fa-solid ${isRest(p)?'fa-play':'fa-mug-hot'}"></i></button><button onclick="rm(${i})" title="Remove" class="text-gray-400 hover:text-red-400 w-8 h-8"><i class="fa-solid fa-xmark"></i></button></div></li>`).join('');
 const g=$('go');g.disabled=ix.length<4||!S.courts.some(c=>!c.isActive);let gh=$('gh');if(!gh){gh=document.createElement('p');gh.id='gh';gh.className='text-xs text-gray-400 text-center mt-2';g.after(gh)}gh.textContent=!g.disabled?'':ix.length<4?'Add '+(4-ix.length)+' more player'+(4-ix.length>1?'s':'')+' to start.':'All courts are busy. Finish a match first.'}
