@@ -232,8 +232,11 @@ html[data-theme=light]{color-scheme:light}
 @media(max-width:639px){
  .session-results-dialog{width:calc(100vw - 1rem)!important;max-height:88dvh!important}
  .session-results-header{padding:.8rem!important}
- .session-results-header>div{align-items:flex-start;flex-direction:column;gap:.5rem}
- .session-results-header h3{font-size:1.35rem}
+ .session-results-header>div{align-items:center;flex-direction:row;gap:.55rem}
+ .session-results-header h3{font-size:clamp(1rem,4.2vw,1.35rem);white-space:nowrap}
+ .session-results-header>div>div{flex:1;min-width:0}
+ .session-results-header input{min-width:0;padding:.55rem .65rem}
+ .session-results-header p{font-size:.65rem}
  .session-results-track{padding:.65rem;gap:.65rem}
  .session-results-panel{flex-basis:calc(100vw - 3.3rem);min-height:12rem;padding:.75rem}
  .session-results-share-content{gap:.65rem}
