@@ -826,7 +826,7 @@ push(c);save();render();say(n+'. '+wn.join(' and ')+' stay on, versus '+ch.join(
 const returned=rotateQueueReturnOrder([...lo,...wn]);S.queue.push(...returned);markWaiting(returned);push(c,'final');clear(c);save();render();
 callNext(n);toast(n+' is free. '+(S.wl&&stk>=S.wl?'Winners hit the '+S.wl+'-win limit and go to the back.':'Not enough players to challenge, so everyone is back in the stack.'),'info');return}
 const o=w==1?[1,0]:[0,1],back=[...c.players.slice(o[0]*2,o[0]*2+2),...c.players.slice(o[1]*2,o[1]*2+2)],returned=rotateQueueReturnOrder(back);S.queue.push(...returned);markWaiting(returned);
-push(c,'final');clear(c);save();render();callNext(n);toast(n+' is free. Winners are back in the stack first.','info')}
+push(c,'final');clear(c);save();render();callNext(n);toast(n+' is free. All four players are back in the stack.','info')}
 function drop(id){const c=S.courts.find(x=>x.id==id);ask('Cancel match?','Players go back to the top of the stack. Nothing is logged.',()=>{c.players.forEach(gpd);S.queue.unshift(...c.players);markWaiting(c.players);push(c,'cancelled');clear(c);save();render()})}
 function ren(id){const c=S.courts.find(x=>x.id==id);if(!c)return;
 const d=modal('<form class="p-6"><h3 class="text-xl text-white mb-4">Rename court</h3><input class="n w-full bg-dark-900 border border-dark-700 rounded-lg px-4 py-3 text-white focus:outline-none focus:border-pickle-500 mb-5" maxlength="20" value="'+esc(c.name)+'"><div class="flex gap-3"><button type="button" data-x class="flex-1 '+bS+'">Cancel</button><button class="flex-1 '+bP+'">Save</button></div></form>');
