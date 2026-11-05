@@ -23,7 +23,7 @@ assert.deepEqual(versions,Array.from({length:43},(_,i)=>i+1),'Historical and res
 const reservations=allocations.filter(x=>x.status==='reserved'||x.status==='assigned').map(x=>({version:Number(x.cache.match(/v([0-9]+)$/)[1]),pr:x.pr,status:x.status}));
 assert.deepEqual(reservations,[
   {version:43,pr:75,status:'reserved'}
-],'PR #73 v41 is released; PR #74 reserves v42');
+],'PR #74 v42 is released; PR #75 reserves v43');
 const released30=allocations.find(x=>x.cache==='queuezerotwo-v30');
 assert.equal(released30?.status,'released','PR #61 v30 is merged before this PR rebases');
 assert.equal(released30?.merge_commit_sha,'afb83d825785137063cf5f55331035d25965d81d');
@@ -73,4 +73,4 @@ assert.equal(released42?.status,'released','PR #74 v42 is merged before this PR'
 assert.equal(released42?.pr,74);
 assert.equal(released42?.merge_commit_sha,'dbde26b5564a73fc03a42610157fedfa5a0ce939');
 assert.equal(manifest.releaseOrder.join(','),'61,62,63,65,66,67,68,69,70,71,72,73,74,75');
-console.log(JSON.stringify({pass:true,currentCache:match[1],released:41,reserved:1,assigned:0,uniqueCacheNames:names.length},null,2));
+console.log(JSON.stringify({pass:true,currentCache:match[1],released:42,reserved:1,assigned:0,uniqueCacheNames:names.length},null,2));
