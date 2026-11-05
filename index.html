@@ -1028,13 +1028,14 @@ function previewFollowingGroups(limit=3){
 }
 function renderQueuePreview(currentCount){
  const eligible=eligibleQueueIndexes().length,resting=S.queue.filter(isRest);
- const groups=currentCount>=4?previewFollowingGroups(3):[];
- $('qpreviewGroups').innerHTML=groups.length?groups.map(g=>'<article class="qpreview-group rounded-lg border border-dark-700 overflow-hidden min-w-0">'
+ const groups=!S.ws&&currentCount>=4?previewFollowingGroups(3):[];
+ $('qpreviewGroups').innerHTML=S.ws?'<p class="text-xs text-gray-400 py-2">Winners Stay is on. After a win, the next two eligible players challenge the pair that stays on court. Later groups depend on match results and the win limit.</p>':groups.length?groups.map(g=>'<article class="qpreview-group rounded-lg border border-dark-700 overflow-hidden min-w-0">'
   +'<div class="flex items-center justify-between gap-2 px-3 py-2 bg-dark-800"><b class="text-xs text-white">Group '+g.number+'</b><span class="text-[10px] text-gray-400">Next in line</span></div>'
   +'<div class="grid grid-cols-2 gap-2 p-2">'+[[g.teams.slice(0,2),'Team 1','bg-blue-600'],[g.teams.slice(2),'Team 2','bg-orange-700']].map(([players,label,color])=>'<div class="qpreview-team rounded-md overflow-hidden min-w-0 border border-dark-700"><div class="'+color+' text-white text-[10px] font-bold px-2 py-1">'+label+'</div><div class="p-2 space-y-1">'+players.map(n=>'<div class="qpreview-player text-xs text-gray-200 leading-snug">'+esc(n)+' <span class="text-[10px] text-gray-400">'+('★'.repeat(lvl(n)))+'</span></div>').join('')+'</div></div>').join('')+'</div>'
   +'</article>').join(''):'<p class="text-xs text-gray-400 py-2">'+(currentCount<4?'Add at least 4 available players to preview upcoming groups.':eligible<4?'No additional full group is waiting after the next call.':'Not enough eligible players for another complete group yet.')+'</p>';
  let selectionReason;
- if(S.eq)selectionReason='Equal sit-outs is on: players with fewer games are prioritized, then the longest wait, then stack order.';
+ if(S.ws)selectionReason='Winners Stay is on: the next two eligible players challenge the pair that wins; later calls depend on match results and the win limit.';
+ else if(S.eq)selectionReason='Equal sit-outs is on: players with fewer games are prioritized, then the longest wait, then stack order.';
  else if(eligible>4)selectionReason='The first two eligible players stay fixed; the picker searches the remaining stack to reduce repeat partnerships.';
  else selectionReason='The next group is formed from the first four eligible players in stack order.';
  const teamReason=S.md==='bal'?'Balanced mode uses skill ratings when splitting teams and still considers partner history.':'Social Mix prioritizes fresh partners and spreads opponents where possible.';
