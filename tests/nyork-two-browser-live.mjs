@@ -445,7 +445,8 @@ async function runNyorkOnce(iteration) {
     try{
       await viewer.waitForFunction(({seq,hostileCourt})=>{
         const text=(document.querySelector('#viewer')?.innerText||'').toLowerCase();
-        return typeof SV!=='undefined'&&SV?.lastBroadcastSeq===seq&&SV?.d?.seq===seq&&SV?.d?.courts?.[0]?.n===hostileCourt&&text.includes(hostileCourt.toLowerCase());
+        const received=SV?.receivedBroadcastSeqs||[];
+        return typeof SV!=='undefined'&&received.includes(seq)&&Number.isSafeInteger(SV?.d?.seq)&&SV.d.seq>=seq&&SV?.d?.courts?.[0]?.n===hostileCourt&&text.includes(hostileCourt.toLowerCase());
       },{seq:hostileSeq,hostileCourt},{timeout:10000});
     }catch(error){
       const diagnostic=await viewer.evaluate(async({seq})=>{
@@ -459,6 +460,10 @@ async function runNyorkOnce(iteration) {
           status:SV?.status||null,
           visibleSequence:SV?.d?.seq??null,
           lastBroadcastSequence:SV?.lastBroadcastSeq??null,
+          broadcastsReceived:SV?.diag?.broadcastsReceived??null,
+          receivedBroadcastSequences:SV?.receivedBroadcastSeqs||[],
+          snapshotsLoaded:SV?.diag?.snapshotsLoaded??null,
+          staleUpdates:SV?.diag?.staleUpdates??null,
           persistedSequence:persisted,
           persistedError,
           visibleText:document.querySelector('#viewer')?.innerText||''
