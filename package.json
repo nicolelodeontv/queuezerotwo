@@ -8,7 +8,8 @@
     "test:pairing": "node tests/partner-rotation.mjs",
     "test:live-view": "node tests/live-view-queue.mjs",
     "test:queue-rotation": "node tests/queue-return-rotation.mjs",
-    "test:next-up-preview": "node tests/next-up-preview-mobile.mjs"
+    "test:next-up-preview": "node tests/next-up-preview-mobile.mjs",
+    "test:live-view-preview": "node tests/live-view-next-up-preview.mjs"
   },
   "devDependencies": {
     "tailwindcss": "^3.4.17"
