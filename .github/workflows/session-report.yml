@@ -1,0 +1,39 @@
+name: Session Summary Regression
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'index.html'
+      - 'session-report.js'
+      - 'tests/session-summary-report.mjs'
+      - 'package.json'
+      - '.github/workflows/session-report.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  session-report:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm install --no-save playwright
+      - run: npx playwright install --with-deps chromium
+      - run: npm run build:css
+      - name: Serve app
+        run: |
+          python3 -m http.server 4173 --directory . > /tmp/q2-http.log 2>&1 &
+          for i in $(seq 1 30); do
+            if curl -fsS http://127.0.0.1:4173/ > /dev/null; then exit 0; fi
+            sleep 1
+          done
+          cat /tmp/q2-http.log
+          exit 1
+      - run: npm run test:session-report
