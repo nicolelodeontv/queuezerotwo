@@ -43,7 +43,7 @@ try{
  await reportButton.waitFor({state:'visible',timeout:5000});
  await reportButton.click();
  await page.getByRole('heading',{name:'Session Summary'}).waitFor();
- assert.match(await page.locator('[role="dialog"]').innerText(),/Ava/);
+ assert.match(await page.getByRole('dialog',{name:'Session Summary'}).innerText(),/Ava/);
  assert.match(await page.locator('[role="dialog"]').innerText(),/50%/);
  for(const width of [320,390,768,1024]){
   await page.setViewportSize({width,height:900});
