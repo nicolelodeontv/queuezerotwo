@@ -227,7 +227,7 @@ html[data-theme=light]{color-scheme:light}
 .session-results-share-content{display:flex;align-items:center;gap:1rem;min-width:0}
 .session-results-share-link{min-width:0}
 .session-results-actions{display:flex;align-items:stretch;gap:.45rem;overflow:visible;width:100%;min-width:0;padding-bottom:.25rem}
-.session-results-actions>button{flex:1 1 0;width:auto!important;box-sizing:border-box;min-width:0;white-space:normal;overflow-wrap:anywhere;min-height:3.25rem;padding:.65rem .45rem;border-radius:.75rem;font-weight:600}
+.session-results-actions>button{flex:1 1 0;width:auto!important;max-width:100%;box-sizing:border-box;min-width:0;white-space:normal;overflow-wrap:anywhere;word-break:normal;line-height:1.15;min-height:3.25rem;padding:.5rem .3rem;border-radius:.75rem;font-size:.7rem;font-weight:600}
 .session-results-dialog .session-report-open{flex:1 0 auto;white-space:nowrap;min-height:3.25rem;padding:.75rem 1rem}
 @media(max-width:639px){
  .session-results-dialog{width:calc(100vw - 1rem)!important;max-height:88dvh!important}
@@ -242,7 +242,7 @@ html[data-theme=light]{color-scheme:light}
  .session-results-share-content{gap:.65rem}
  .session-results-share-content .qrb{width:104px!important}
  .session-results-actions{gap:.45rem}
- .session-results-actions>button,.session-results-dialog .session-report-open{font-size:.75rem;padding:.65rem .8rem}
+ .session-results-actions>button{font-size:.65rem;padding:.45rem .2rem;min-width:0;max-width:100%}.session-results-dialog .session-report-open{font-size:.75rem;padding:.65rem .8rem}
  .session-results-dialog{height:calc(100dvh - 2rem)!important;max-height:calc(100dvh - 2rem)!important}
  .session-results-track{min-height:0;max-height:100%;align-items:stretch}
  .session-results-panel{height:100%;min-height:0;max-height:100%;overflow-y:auto}
@@ -251,7 +251,7 @@ html[data-theme=light]{color-scheme:light}
 @media(max-width:360px){
  .session-results-panel{flex-basis:calc(100vw - 3rem)}
  .session-results-share-content .qrb{width:88px!important}
- .session-results-actions>button,.session-results-dialog .session-report-open{font-size:.7rem}
+ .session-results-actions>button{font-size:.62rem;padding:.4rem .15rem}.session-results-dialog .session-report-open{font-size:.7rem}
 }
 
 </style>
