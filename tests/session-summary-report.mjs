@@ -58,7 +58,7 @@ try{
  const path=await download.path();
  const csv=await readFile(path,'utf8');
  assert.match(csv,/"Player","Saturday Open Play","Ava","3","1","1","50%","2","3"/);
- assert.match(csv,/Match,"Saturday Open Play"/);
+ assert.match(csv,/"Match","Saturday Open Play"/);
  assert.match(csv,/No winner recorded/);
  await context.close();
  console.log('PASS: session report calculations, no-winner handling, sit-out metadata, partner variety, responsive modal, and CSV match export.');
