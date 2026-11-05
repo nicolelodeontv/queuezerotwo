@@ -12,10 +12,11 @@
     70,
     71,
     72,
-    73
+    73,
+    74
   ],
-  "currentBranch": "feature/progressive-post-game-reshuffle",
-  "currentCache": "queuezerotwo-v41",
+  "currentBranch": "feature/next-up-mobile-ux",
+  "currentCache": "queuezerotwo-v42",
   "allocations": [
     {
       "cache": "queuezerotwo-v1",
@@ -240,9 +241,15 @@
     },
     {
       "cache": "queuezerotwo-v41",
-      "status": "reserved",
+      "status": "released",
       "pr": 73,
-      "branch": "feature/progressive-post-game-reshuffle"
+      "merge_commit_sha": "d533a0d72430855af075726be6081929659ad451"
+    },
+    {
+      "cache": "queuezerotwo-v42",
+      "status": "reserved",
+      "pr": 74,
+      "branch": "feature/next-up-mobile-ux"
     }
   ]
 }

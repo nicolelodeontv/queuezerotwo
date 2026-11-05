@@ -7,7 +7,8 @@
     "watch:css": "tailwindcss -i ./src/input.css -o ./tailwind.css --watch",
     "test:pairing": "node tests/partner-rotation.mjs",
     "test:live-view": "node tests/live-view-queue.mjs",
-    "test:queue-rotation": "node tests/queue-return-rotation.mjs"
+    "test:queue-rotation": "node tests/queue-return-rotation.mjs",
+    "test:next-up-preview": "node tests/next-up-preview-mobile.mjs"
   },
   "devDependencies": {
     "tailwindcss": "^3.4.17"

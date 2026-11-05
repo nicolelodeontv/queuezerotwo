@@ -19,11 +19,11 @@ for(const item of allocations){
   assert.match(item.cache,/^queuezerotwo-v[1-9][0-9]*$/,'Cache names use the numeric QueueZeroTwo version format');
 }
 const versions=allocations.map(x=>Number(x.cache.match(/v([0-9]+)$/)[1])).sort((a,b)=>a-b);
-assert.deepEqual(versions,Array.from({length:41},(_,i)=>i+1),'Historical and reserved cache versions must remain contiguous and unique');
+assert.deepEqual(versions,Array.from({length:42},(_,i)=>i+1),'Historical and reserved cache versions must remain contiguous and unique');
 const reservations=allocations.filter(x=>x.status==='reserved'||x.status==='assigned').map(x=>({version:Number(x.cache.match(/v([0-9]+)$/)[1]),pr:x.pr,status:x.status}));
 assert.deepEqual(reservations,[
-  {version:41,pr:73,status:'reserved'}
-],'PR #72 v40 is released; PR #73 reserves v41');
+  {version:42,pr:74,status:'reserved'}
+],'PR #73 v41 is released; PR #74 reserves v42');
 const released30=allocations.find(x=>x.cache==='queuezerotwo-v30');
 assert.equal(released30?.status,'released','PR #61 v30 is merged before this PR rebases');
 assert.equal(released30?.merge_commit_sha,'afb83d825785137063cf5f55331035d25965d81d');
@@ -64,5 +64,9 @@ const released40=allocations.find(x=>x.cache==='queuezerotwo-v40');
 assert.equal(released40?.status,'released','PR #72 v40 is merged before this PR');
 assert.equal(released40?.pr,72);
 assert.equal(released40?.merge_commit_sha,'0dcc7851f457277430cfc1ff4a795afae07282e1');
-assert.equal(manifest.releaseOrder.join(','),'61,62,63,65,66,67,68,69,70,71,72,73');
-console.log(JSON.stringify({pass:true,currentCache:match[1],released:40,reserved:1,assigned:0,uniqueCacheNames:names.length},null,2));
+const released41=allocations.find(x=>x.cache==='queuezerotwo-v41');
+assert.equal(released41?.status,'released','PR #73 v41 is merged before this PR');
+assert.equal(released41?.pr,73);
+assert.equal(released41?.merge_commit_sha,'d533a0d72430855af075726be6081929659ad451');
+assert.equal(manifest.releaseOrder.join(','),'61,62,63,65,66,67,68,69,70,71,72,73,74');
+console.log(JSON.stringify({pass:true,currentCache:match[1],released:41,reserved:1,assigned:0,uniqueCacheNames:names.length},null,2));
