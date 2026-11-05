@@ -1758,6 +1758,14 @@ async function main() {
     // The locked Results dialog stays usable on a narrow phone viewport.
     await dp.setViewportSize({width:320,height:640});
     assert.equal(await resultsDialog.locator('.qrb').evaluate(el=>getComputedStyle(el).display),'none','QR is hidden at phone width');
+    // The result sections are intentionally arranged in a horizontal swipe track.
+    // Bring the action section into view before checking its controls against the viewport.
+    const resultsTrack=resultsDialog.locator('.session-results-track');
+    await resultsTrack.evaluate(el=>{el.scrollLeft=el.scrollWidth});
+    await dp.waitForTimeout(100);
+    const actionPanel=resultsDialog.locator('.session-results-action-panel');
+    const actionRect=await actionPanel.evaluate(el=>{const r=el.getBoundingClientRect();return {x:r.x,right:r.right}});
+    assert.ok(actionRect.x>=0&&actionRect.right<=320,'Session actions panel is reachable within the 320px viewport after horizontal swipe');
     for (const [selector,label] of [['.sh','Share results image'],['.rb','Export backup'],['.nw','New session']]) {
       const button=resultsDialog.locator(selector);
       await button.waitFor({state:'visible',timeout:5000});
