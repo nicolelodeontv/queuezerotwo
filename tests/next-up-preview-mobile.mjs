@@ -41,6 +41,10 @@ try {
         S.gp={};
         S.wt=normalizeWaitTimes(S.queue,{});
         S.lv={};
+        S.courts=[
+          {id:1,name:'Court 1',isActive:true,players:['Alex','Blair','Casey','Devon'],score:[5,3],mid:'mobile1',t:Date.now(),hold:null,stk:0},
+          {id:2,name:'Court 2',isActive:true,players:['Elliot','Frankie','Gray','Harper'],score:[7,6],mid:'mobile2',t:Date.now(),hold:null,stk:0},
+        ];
         render();
       });
 
@@ -141,6 +145,8 @@ try {
             previewClientWidth:preview?.clientWidth??0,
             previewScrollWidth:preview?.scrollWidth??0,
             cards:cards.map(rect),
+            courtCards:[...document.querySelectorAll('#courts>div')].map(rect),
+            courtScoreButtonHeights:[...document.querySelectorAll('#courts .sbg')].map(b=>Math.round(b.getBoundingClientRect().height)),
             buttonMinHeights:actionButtons.map(b=>Math.round(b.getBoundingClientRect().height)),
             navVisible:getComputedStyle(document.querySelector('#nav')).display!=='none',
           };
@@ -150,6 +156,8 @@ try {
         assert.ok(metrics.previewScrollWidth<=metrics.previewClientWidth+1,theme+' '+width+'px preview content overflow: '+JSON.stringify(metrics));
         assert.ok(metrics.panel.left>=-1&&metrics.panel.right<=width+1,theme+' '+width+'px Up Next panel outside viewport');
         assert.ok(metrics.cards.every(r=>r.left>=-1&&r.right<=width+1),theme+' '+width+'px a preview card extends outside viewport');
+        assert.ok(metrics.courtCards.length===2&&metrics.courtCards.every(r=>r.left>=-1&&r.right<=width+1),theme+' '+width+'px an active court card extends outside viewport');
+        assert.ok(metrics.courtScoreButtonHeights.every(h=>h>=56),theme+' '+width+'px score controls are too small');
         if(width<=639){
           assert.ok(metrics.buttonMinHeights.every(h=>h>=44),theme+' '+width+'px Up Next action button below 44px');
           assert.equal(metrics.navVisible,true,'phone bottom navigation should be visible');
