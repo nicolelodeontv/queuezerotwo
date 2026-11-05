@@ -271,7 +271,7 @@ html[data-theme=light]{color-scheme:light}
 
 <div id="rcol" class="lg:col-span-8 space-y-10">
 <section id="sun" class="bg-dark-800 rounded-2xl border border-dark-700 p-5">
-<div class="flex flex-wrap justify-between items-center gap-3 mb-4"><div><h2 class="text-2xl text-white">Up Next</h2><p class="text-gray-400 text-sm">Teams for the next four players in the stack.</p></div>
+<div class="flex flex-wrap justify-between items-center gap-3 mb-4"><div><h2 class="text-2xl text-white">Up Next</h2><p class="text-gray-400 text-sm">Teams for the next four eligible players. Resting players are skipped.</p></div>
 <div class="flex items-center gap-2 text-xs flex-wrap"><button id="mdb" onclick="smd('bal')">Balanced</button><button id="mds" onclick="smd('soc')">Social mix</button><button onclick="rotationFairness()" title="Review player games, sit-outs and waiting time" class="px-3 py-1.5 rounded-lg border border-dark-700 text-gray-300 hover:border-pickle-500"><i class="fa-solid fa-scale-balanced"></i> Fairness</button><button onclick="fairnessTrends()" title="Compare fairness across past sessions" class="px-3 py-1.5 rounded-lg border border-dark-700 text-gray-300 hover:border-pickle-500"><i class="fa-solid fa-chart-line"></i> Trends</button><button onclick="shuf()" class="px-3 py-1.5 rounded-lg border border-dark-700 text-gray-300 hover:border-pickle-500"><i class="fa-solid fa-shuffle"></i> Reshuffle</button><button onclick="announceNext()" title="Say the next teams out loud" class="px-3 py-1.5 rounded-lg border border-dark-700 text-gray-300 hover:border-pickle-500"><i class="fa-solid fa-bullhorn"></i> Announce</button></div></div>
 <p id="mdi" class="text-xs text-gray-400 mb-3"></p>
 <div class="flex flex-wrap items-center gap-2 text-xs mb-3"><button id="wsb" onclick="tws()"></button><button id="eqb" onclick="teq()"></button><label id="wlw" class="text-gray-400 flex items-center gap-1">Max wins in a row <select id="wls" onchange="swl(+this.value)" class="bg-dark-900 border border-dark-700 rounded px-2 py-1 text-white"><option value="0">No limit</option><option value="2">2</option><option value="3">3</option><option value="4">4</option></select></label></div>
@@ -1015,7 +1015,7 @@ const lsel=i=>`<select onchange="setLv(${i},+this.value)" title="Skill level" cl
 function previewFollowingGroups(limit=3){
  const live=S,following=[];
  try{
-  S=JSON.parse(JSON.stringify(live));
+  S={...live,queue:[...(live.queue||[])],wt:{...(live.wt||{})}};
   for(let groupNo=1;groupNo<=limit;groupNo++){
    const ix=pick4();if(ix.length<4)break;
    const names=ix.map(i=>S.queue[i]),teams=split4(names);
