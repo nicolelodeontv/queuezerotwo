@@ -131,6 +131,12 @@ jobs:
         env:
           APP_URL: http://127.0.0.1:4173/
         run: node tests/next-up-preview-mobile.mjs
+      - name: Check Live View following-group test syntax
+        run: node --check tests/live-view-next-up-preview.mjs
+      - name: Test upcoming groups in shared Live View
+        env:
+          APP_URL: http://127.0.0.1:4173/
+        run: node tests/live-view-next-up-preview.mjs
       - name: Check 320px light/dark visual test syntax
         run: node --check tests/responsive-320-themes.mjs
       - name: Run 320px light/dark menu and layout checks

@@ -13,10 +13,11 @@
     71,
     72,
     73,
-    74
+    74,
+    75
   ],
-  "currentBranch": "feature/next-up-mobile-ux",
-  "currentCache": "queuezerotwo-v42",
+  "currentBranch": "feature/live-view-next-up-preview",
+  "currentCache": "queuezerotwo-v43",
   "allocations": [
     {
       "cache": "queuezerotwo-v1",
@@ -247,9 +248,16 @@
     },
     {
       "cache": "queuezerotwo-v42",
-      "status": "reserved",
+      "status": "released",
       "pr": 74,
-      "branch": "feature/next-up-mobile-ux"
+      "branch": "feature/next-up-mobile-ux",
+      "merge_commit_sha": "dbde26b5564a73fc03a42610157fedfa5a0ce939"
+    },
+    {
+      "cache": "queuezerotwo-v43",
+      "status": "reserved",
+      "pr": 75,
+      "branch": "feature/live-view-next-up-preview"
     }
   ]
 }
