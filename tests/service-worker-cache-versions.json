@@ -12,10 +12,11 @@
     70,
     71,
     72,
-    73
+    73,
+    74
   ],
-  "currentBranch": "feature/progressive-post-game-reshuffle",
-  "currentCache": "queuezerotwo-v41",
+  "currentBranch": "feature/next-up-mobile-ux",
+  "currentCache": "queuezerotwo-v42",
   "allocations": [
     {
       "cache": "queuezerotwo-v1",
@@ -243,6 +244,12 @@
       "status": "reserved",
       "pr": 73,
       "branch": "feature/progressive-post-game-reshuffle"
+    },
+    {
+      "cache": "queuezerotwo-v42",
+      "status": "reserved",
+      "pr": 74,
+      "branch": "feature/next-up-mobile-ux"
     }
   ]
 }
