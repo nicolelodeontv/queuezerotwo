@@ -14,10 +14,11 @@
     72,
     73,
     74,
-    75
+    75,
+    77
   ],
-  "currentBranch": "feature/live-view-next-up-preview",
-  "currentCache": "queuezerotwo-v43",
+  "currentBranch": "feature/session-summary-player-statistics",
+  "currentCache": "queuezerotwo-v44",
   "allocations": [
     {
       "cache": "queuezerotwo-v1",
@@ -258,6 +259,12 @@
       "status": "reserved",
       "pr": 75,
       "branch": "feature/live-view-next-up-preview"
+    },
+    {
+      "cache": "queuezerotwo-v44",
+      "status": "assigned",
+      "pr": 77,
+      "branch": "feature/session-summary-player-statistics"
     }
   ]
 }
