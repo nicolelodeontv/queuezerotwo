@@ -847,7 +847,7 @@ async function main() {
   await Promise.all([desktop,iphone,pixel].map(context=>context.tracing.start({screenshots:true,snapshots:true,sources:true})));
   const syncPublishes = [];
   const resultPublishes = [];
-  for(let oldVersion=1;oldVersion<=42;oldVersion++){
+  for(let oldVersion=1;oldVersion<=43;oldVersion++){
     await simulateOldCacheToV44(browser,oldVersion);
   }
   await finishLogWinnerSelectionRegression(browser);
