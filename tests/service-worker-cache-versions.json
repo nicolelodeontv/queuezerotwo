@@ -17,8 +17,8 @@
     75,
     77
   ],
-  "currentBranch": "feature/session-summary-player-statistics",
-  "currentCache": "queuezerotwo-v44",
+  "currentBranch": "main",
+  "currentCache": "queuezerotwo-v45",
   "allocations": [
     {
       "cache": "queuezerotwo-v1",
@@ -265,6 +265,12 @@
       "status": "assigned",
       "pr": 77,
       "branch": "feature/session-summary-player-statistics"
+    },
+    {
+      "cache": "queuezerotwo-v45",
+      "status": "assigned",
+      "pr": null,
+      "branch": "main"
     }
   ]
 }
