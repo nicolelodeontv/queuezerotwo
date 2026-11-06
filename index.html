@@ -14,7 +14,7 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcode-generator/1.4.4/qrcode.min.js"></script>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Oswald:wght@500;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+<link rel="stylesheet" href="/icons.css">
 <style>
 :focus-visible{outline:2px solid #ccff00;outline-offset:2px}
 body{background:#0B0F19;color:#f8fafc;font-family:Inter,sans-serif}
@@ -263,6 +263,15 @@ html[data-theme=light]{color-scheme:light}
  #msg>*{font-size:.8rem;padding:.6rem .8rem}
 }
 .session-results-header input{text-overflow:ellipsis}
+/* Desktop: pop-up messages go bottom-right so they never cover the page header or controls. */
+@media(min-width:1024px){
+ #msg{top:auto!important;left:auto!important;right:1.5rem;bottom:1.5rem;transform:none!important;max-width:22rem;flex-direction:column-reverse}
+}
+/* Phones: Rest and Remove get full-size, well-separated touch targets. */
+@media(pointer:coarse),(max-width:1023px){
+ #ql button[title="Rest"],#ql button[title="Remove"],#wl button[title="Remove"]{min-width:44px;min-height:44px;display:inline-flex;align-items:center;justify-content:center}
+ #ql li>div:last-child,#wl li>div:last-child{gap:.35rem}
+}
 /* Touch targets: enlarge the tiny court-rename pencil without moving the layout. */
 @media(pointer:coarse),(max-width:1023px){
  button[onclick^="ren("]{position:relative}
@@ -338,7 +347,7 @@ html[data-theme=light]{color-scheme:light}
 </div>
 <div id="sadd" class="px-6 pb-6 border-b border-dark-700 shrink-0">
 <form id="f" class="flex gap-2">
-<input id="pn" type="text" aria-label="Player names" placeholder="Name, several with commas, or Ana | 3.5" autocomplete="off" class="flex-grow min-w-0 bg-dark-900 border border-dark-700 rounded-lg px-4 py-3 text-white focus:outline-none focus:border-pickle-500">
+<input id="pn" type="text" aria-label="Player names" aria-keyshortcuts="/" title="Rating is optional: Ana | 3.0 = ★★★, 3.5 = ★★★★, 4.0 = ★★★★★, 4.5+ = ★★★★★★" placeholder="Name, several with commas, or Ana | 3.5" autocomplete="off" class="flex-grow min-w-0 bg-dark-900 border border-dark-700 rounded-lg px-4 py-3 text-white focus:outline-none focus:border-pickle-500">
 <button class="bg-pickle-500 hover:bg-pickle-400 text-dark-900 font-sport font-bold px-5 rounded-lg active:scale-95">ADD</button>
 </form>
 </div>
@@ -353,7 +362,7 @@ html[data-theme=light]{color-scheme:light}
 <div id="dm" class="text-center pb-4"><button onclick="demo()" class="bg-pickle-500 hover:bg-pickle-400 text-dark-900 font-bold rounded-lg px-4 py-2 text-sm">Try a demo</button><p class="text-xs text-gray-400 mt-3">1. Add players &nbsp; 2. Send 4 to court &nbsp; 3. Tap +1 to score</p></div>
 </div>
 <div id="sgo" class="p-4 border-t border-dark-700 shrink-0">
-<button id="go" class="w-full bg-pickle-500 hover:bg-pickle-400 text-dark-900 font-sport text-xl py-4 rounded-xl active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"><i class="fa-solid fa-play"></i> SEND NEXT 4 TO COURT</button>
+<button id="go" aria-keyshortcuts="g" class="w-full bg-pickle-500 hover:bg-pickle-400 text-dark-900 font-sport text-xl py-4 rounded-xl active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"><i class="fa-solid fa-play"></i> SEND NEXT 4 TO COURT</button>
 </div>
 </div></section>
 
@@ -410,7 +419,7 @@ html[data-theme=light]{color-scheme:light}
 <button id="nvt" onclick="tab('stats')"><i class="fa-solid fa-ranking-star text-lg"></i><span>Stats</span></button>
 <div class="w-20 flex items-center justify-center"><button id="fab" onclick="addPl()" aria-label="Add player" title="Add player" class="w-12 h-12 rounded-full bg-pickle-500 text-dark-900 shadow-lg active:scale-95"><i class="fa-solid fa-plus text-xl"></i></button></div>
 </nav>
-<dialog id="faq" aria-labelledby="faq-h" class="m-auto w-[92vw] max-w-xl max-h-[85vh] overflow-y-auto rounded-2xl border border-dark-700 bg-dark-900 p-6 text-gray-300 backdrop:bg-black/70"><h2 id="faq-h" class="text-xl font-bold text-white mb-2">How pickleball paddle stacking works</h2><p class="text-sm text-gray-400 mb-6">Paddle stacking keeps open play fair: players line up, and the next four take the next free court.</p><div class="space-y-3 text-sm max-w-3xl"><details class="bg-dark-800 border border-dark-700 rounded-lg p-4"><summary class="cursor-pointer font-medium text-white">What is paddle stacking?</summary><p class="mt-2 text-gray-400">Players leave their paddles in a line at the court. When a game ends, the next four paddles in line go on, and the finished players return to the back.</p></details><details class="bg-dark-800 border border-dark-700 rounded-lg p-4"><summary class="cursor-pointer font-medium text-white">How does QueueZeroTwo run the rotation?</summary><p class="mt-2 text-gray-400">Add players to the stack, send the next four to a free court, and score the match. You can balance teams by skill or mix partners socially, and cap winning streaks so everyone gets court time.</p></details><details class="bg-dark-800 border border-dark-700 rounded-lg p-4"><summary class="cursor-pointer font-medium text-white">Do players need an account?</summary><p class="mt-2 text-gray-400">No. Your session is saved on your device. Live View is optional and gives players a link to follow the queue and scores.</p></details><details class="bg-dark-800 border border-dark-700 rounded-lg p-4"><summary class="cursor-pointer font-medium text-white">Is it free?</summary><p class="mt-2 text-gray-400">Yes. Use Export to back up a session and Import to restore it on another device.</p></details></div><form method="dialog" class="mt-6 text-right"><button class="rounded-lg bg-dark-700 hover:bg-dark-800 border border-dark-700 text-gray-200 px-4 py-2 text-sm">Close</button></form></dialog>
+<dialog id="faq" aria-labelledby="faq-h" class="m-auto w-[92vw] max-w-xl max-h-[85vh] overflow-y-auto rounded-2xl border border-dark-700 bg-dark-900 p-6 text-gray-300 backdrop:bg-black/70"><h2 id="faq-h" class="text-xl font-bold text-white mb-2">How pickleball paddle stacking works</h2><p class="text-sm text-gray-400 mb-6">Paddle stacking keeps open play fair: players line up, and the next four take the next free court.</p><div class="space-y-3 text-sm max-w-3xl"><details class="bg-dark-800 border border-dark-700 rounded-lg p-4"><summary class="cursor-pointer font-medium text-white">What is paddle stacking?</summary><p class="mt-2 text-gray-400">Players leave their paddles in a line at the court. When a game ends, the next four paddles in line go on, and the finished players return to the back.</p></details><details class="bg-dark-800 border border-dark-700 rounded-lg p-4"><summary class="cursor-pointer font-medium text-white">How does QueueZeroTwo run the rotation?</summary><p class="mt-2 text-gray-400">Add players to the stack, send the next four to a free court, and score the match. You can balance teams by skill or mix partners socially, and cap winning streaks so everyone gets court time.</p></details><details class="bg-dark-800 border border-dark-700 rounded-lg p-4"><summary class="cursor-pointer font-medium text-white">Do players need an account?</summary><p class="mt-2 text-gray-400">No. Your session is saved on your device. Live View is optional and gives players a link to follow the queue and scores.</p></details><details class="bg-dark-800 border border-dark-700 rounded-lg p-4"><summary class="cursor-pointer font-medium text-white">Keyboard shortcuts</summary><p class="mt-2 text-gray-400">On a computer, press / to jump to the add-player box and G to send the next four to court. Shortcuts pause while you are typing or a window is open.</p></details><details class="bg-dark-800 border border-dark-700 rounded-lg p-4"><summary class="cursor-pointer font-medium text-white">Is it free?</summary><p class="mt-2 text-gray-400">Yes. Use Export to back up a session and Import to restore it on another device.</p></details></div><form method="dialog" class="mt-6 text-right"><button class="rounded-lg bg-dark-700 hover:bg-dark-800 border border-dark-700 text-gray-200 px-4 py-2 text-sm">Close</button></form></dialog>
 <footer class="bg-dark-900 border-t border-dark-700 px-3 py-3 text-center text-xs text-gray-400"><p>&copy; 2026 QueueZeroTwo · Pickleball queue &amp; court rotation · <button onclick="openFaq()" class="underline hover:text-white">How it works</button></p></footer>
 
 <script>
@@ -878,13 +887,14 @@ function undoToast(m,fn){const t=document.createElement('div');t.className='mb b
 const sp=document.createElement('span');sp.textContent=m;const b=document.createElement('button');b.type='button';b.textContent='Undo';b.className='rounded-lg bg-pickle-500 text-dark-900 font-bold px-3 py-1.5';
 b.onclick=()=>{t.remove();fn()};t.append(sp,b);$('msg').append(t);setTimeout(()=>t.remove(),6000)}
 function rmWaiting(i){const p=S.waiting.splice(i,1)[0];if(p===undefined)return;save();render();undoToast(p+' removed',()=>{S.waiting.splice(Math.min(i,S.waiting.length),0,p);save();render()})}
-function addNames(v){const n=v.split(/[,\n]/).map(s=>s.trim()).filter(Boolean);if(!n.length)return 0;S.waiting.push(...n.map(q=>{const[a,t]=q.split('|').map(x=>x.trim()),x=parseFloat(t);if(x)S.lv[a.toLowerCase()]=x<2.25?1:x<2.75?2:x<3.25?3:x<3.75?4:x<4.25?5:6;return a}).filter(Boolean));save();render();return n.length}
+function ratingLv(x){return x<2.25?1:x<2.75?2:x<3.25?3:x<3.75?4:x<4.25?5:6}
+function addNames(v){const n=v.split(/[,\n]/).map(s=>s.trim()).filter(Boolean);if(!n.length)return 0;S.waiting.push(...n.map(q=>{const[a,t]=q.split('|').map(x=>x.trim()),x=parseFloat(t);if(x)S.lv[a.toLowerCase()]=ratingLv(x);return a}).filter(Boolean));save();render();return n.length}
 $('f').onsubmit=e=>{e.preventDefault();if(addNames($('pn').value))$('pn').value=''};
 /* Add Player button (phones): same behavior as the form, stays open so you can add several */
 function addPl(){
-  const d=modal('<form class="p-6"><h3 class="text-xl text-white mb-1">Add players</h3><p class="text-xs text-gray-400 mb-4">Separate names with commas, or use Ana | 3.5 to set a rating. They go to Not yet here until checked in.</p><input class="n w-full bg-dark-900 border border-dark-700 rounded-lg px-4 py-3 text-white focus:outline-none focus:border-pickle-500" placeholder="Name, several with commas, or Ana | 3.5" autocomplete="off" enterkeyhint="done"><p class="ok text-xs text-pickle-500 mt-2 min-h-[1rem]"></p><div class="flex gap-3 mt-3"><button type="button" data-x class="flex-1 '+bS+'">Done</button><button class="flex-1 '+bP+'">Add</button></div></form>');
+  const d=modal('<form class="p-6"><h3 class="text-xl text-white mb-1">Add players</h3><p class="text-xs text-gray-400 mb-4">Separate names with commas, or add a rating like Ana | 3.5. Ratings: 2.0 = ★, 2.5 = ★★, 3.0 = ★★★, 3.5 = ★★★★, 4.0 = ★★★★★, 4.5+ = ★★★★★★. They go to Not yet here until checked in.</p><input class="n w-full bg-dark-900 border border-dark-700 rounded-lg px-4 py-3 text-white focus:outline-none focus:border-pickle-500" placeholder="Name, several with commas, or Ana | 3.5" autocomplete="off" enterkeyhint="done"><p class="ok text-xs text-pickle-500 mt-2 min-h-[1rem]"></p><div class="flex gap-3 mt-3"><button type="button" data-x class="flex-1 '+bS+'">Done</button><button class="flex-1 '+bP+'">Add</button></div></form>');
   const i=d.querySelector('.n'),ok=d.querySelector('.ok');i.focus();
-  d.querySelector('form').onsubmit=e=>{e.preventDefault();const v=i.value,c=addNames(v);if(c){ok.textContent=c+(c>1?' players':' player')+' added: '+v.split(/[,\n]/).map(s=>s.split('|')[0].trim()).filter(Boolean).join(', ');i.value=''}i.focus()}}
+  d.querySelector('form').onsubmit=e=>{e.preventDefault();const v=i.value,c=addNames(v);if(c){ok.textContent=c+(c>1?' players':' player')+' added: '+v.split(/[,\n]/).map(s=>{const[a,t]=s.split('|').map(x=>x.trim()),x=parseFloat(t);return a?(x?a+' '+'★'.repeat(ratingLv(x)):a):''}).filter(Boolean).join(', ');i.value=''}i.focus()}}
 function rm(i){const p=S.queue.splice(i,1)[0];if(!p)return;const wt=S.wt&&S.wt[wk(p)];clearWaiting([p]);save();render();undoToast(p+' removed',()=>{S.queue.splice(Math.min(i,S.queue.length),0,p);if(wt!==undefined){S.wt=S.wt||{};S.wt[wk(p)]=wt}save();render()})}
 $('go').onclick=()=>{
 if(pick4().length<4)return toast('Need at least 4 players who are not resting.','error');
@@ -1590,6 +1600,11 @@ document.addEventListener('keydown',e=>{if(e.key==='Escape'&&isOpen()){close();m
 mq.addEventListener('change',close);
 (bar.previousElementSibling||bar).prepend(mb);document.body.append(sc,m);paint()}
 setTimeout(initMenu,0);
+/* Desktop shortcuts: / focuses add player, G sends the next four to court. Ignored while typing or when a window is open. */
+document.addEventListener('keydown',e=>{if(e.ctrlKey||e.metaKey||e.altKey||e.defaultPrevented)return;const t=e.target,tag=t&&t.tagName;if(tag==='INPUT'||tag==='TEXTAREA'||tag==='SELECT'||(t&&t.isContentEditable))return;
+if(document.querySelector('dialog[open],[role=dialog]'))return;
+if(e.key==='/'){const i=$('pn');if(i&&i.offsetParent){e.preventDefault();i.focus()}}
+else if((e.key==='g'||e.key==='G')&&tag!=='BUTTON'){const g=$('go');if(g&&g.offsetParent&&!g.disabled){e.preventDefault();g.click()}}});
 
 /* Release 4: How it works popup */
 function openFaq(){const d=$('faq');if(d&&d.showModal)d.showModal()}

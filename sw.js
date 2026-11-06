@@ -1,10 +1,9 @@
 /* QueueZeroTwo service worker. Bump V on each release to refresh the cache. Profiles are included in the app shell. */
-const V = 'queuezerotwo-v45';
-const SHELL = ['/', '/manifest.webmanifest', '/tailwind.css', '/profiles.js', '/session-report.js', '/favicon.svg', '/icon-192.png', '/icon-512.png', '/icon-maskable-512.png', '/apple-touch-icon.png'];
+const V = 'queuezerotwo-v46';
+const SHELL = ['/', '/manifest.webmanifest', '/tailwind.css', '/icons.css', '/profiles.js', '/session-report.js', '/favicon.svg', '/icon-192.png', '/icon-512.png', '/icon-maskable-512.png', '/apple-touch-icon.png'];
 const CDN = [
   'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js',
   'https://cdnjs.cloudflare.com/ajax/libs/qrcode-generator/1.4.4/qrcode.min.js',
-  'https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css',
   'https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Oswald:wght@500;700&display=swap'
 ];
 
