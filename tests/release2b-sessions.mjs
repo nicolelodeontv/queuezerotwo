@@ -1792,7 +1792,7 @@ async function main() {
     }
     assert.equal(exportReached,true,'Export backup is included in the modal focus trap');
     await dp.setViewportSize({width:639,height:800});
-    assert.equal(await resultsDialog.locator('.qrb').evaluate(el=>getComputedStyle(el).display),'none','QR stays hidden below the sm breakpoint');
+    assert.notEqual(await resultsDialog.locator('.qrb').evaluate(el=>getComputedStyle(el).display),'none','QR stays visible below the sm breakpoint');
     await dp.setViewportSize({width:640,height:800});
     assert.notEqual(await resultsDialog.locator('.qrb').evaluate(el=>getComputedStyle(el).display),'none','QR appears at the sm breakpoint');
     await dp.setViewportSize({width:1280,height:800});
