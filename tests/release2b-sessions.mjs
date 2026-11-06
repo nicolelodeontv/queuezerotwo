@@ -1757,7 +1757,11 @@ async function main() {
 
     // The locked Results dialog stays usable on a narrow phone viewport.
     await dp.setViewportSize({width:320,height:640});
-    assert.equal(await resultsDialog.locator('.qrb').evaluate(el=>getComputedStyle(el).display),'none','QR is hidden at phone width');
+    const resultsQr=resultsDialog.locator('.qrb');
+    assert.notEqual(await resultsQr.evaluate(el=>getComputedStyle(el).display),'none','Results QR remains visible at phone width');
+    assert.ok(await resultsQr.locator('svg').count(),'Results QR SVG is rendered at phone width');
+    const qrRect=await resultsQr.evaluate(el=>{const r=el.getBoundingClientRect();return {width:r.width,height:r.height}});
+    assert.ok(qrRect.width>=72&&qrRect.height>=72,'Results QR remains large enough to scan on a phone');
     // The result sections are intentionally arranged in a horizontal swipe track.
     // Bring the action section into view before checking its controls against the viewport.
     const resultsTrack=resultsDialog.locator('.session-results-track');
@@ -1788,14 +1792,55 @@ async function main() {
     }
     assert.equal(exportReached,true,'Export backup is included in the modal focus trap');
     await dp.setViewportSize({width:639,height:800});
-    assert.equal(await resultsDialog.locator('.qrb').evaluate(el=>getComputedStyle(el).display),'none','QR stays hidden below the sm breakpoint');
+    assert.notEqual(await resultsDialog.locator('.qrb').evaluate(el=>getComputedStyle(el).display),'none','QR stays visible below the sm breakpoint');
     await dp.setViewportSize({width:640,height:800});
     assert.notEqual(await resultsDialog.locator('.qrb').evaluate(el=>getComputedStyle(el).display),'none','QR appears at the sm breakpoint');
     await dp.setViewportSize({width:1280,height:800});
     assert.notEqual(await resultsDialog.locator('.qrb').evaluate(el=>getComputedStyle(el).display),'none','Projector/desktop Results dialog keeps the QR visible');
 
+    // Verify the actual share controls, not only their visual presence.
+    const expectedResultsUrl=(await resultsDialog.locator('.session-results-share-link > div').innerText()).trim();
+    assert.match(expectedResultsUrl,/^https?:\/\/.+#(?:r|s)=/,'Results share panel exposes the published results URL');
+    await dp.evaluate(()=>{
+      window.__copiedResultsText='';
+      Object.defineProperty(navigator,'clipboard',{value:{writeText:async value=>{window.__copiedResultsText=value}},configurable:true});
+    });
+    await resultsDialog.locator('.cp').click();
+    assert.equal(await dp.evaluate(()=>window.__copiedResultsText),expectedResultsUrl,'Copy results link writes the exact session URL to clipboard');
+
+    await dp.evaluate(()=>{
+      window.__openedShareUrl='';
+      window.open=(url)=>{window.__openedShareUrl=url;return {opener:null}};
+    });
+    await resultsDialog.locator('.fb').click();
+    const facebookShareUrl=await dp.evaluate(()=>window.__openedShareUrl);
+    assert.ok(facebookShareUrl.startsWith('https://www.facebook.com/sharer/sharer.php?u='),'Facebook opens its share dialog');
+    assert.equal(new URL(facebookShareUrl).searchParams.get('u'),expectedResultsUrl,'Facebook receives the exact results URL');
+
+    await dp.evaluate(()=>{
+      window.__nativeSharePayload=null;
+      Object.defineProperty(navigator,'share',{value:async payload=>{window.__nativeSharePayload=payload},configurable:true});
+    });
+    await resultsDialog.locator('.ms').click();
+    const messengerPayload=await dp.evaluate(()=>window.__nativeSharePayload);
+    assert.equal(messengerPayload.url,expectedResultsUrl,'Messenger/native share receives the exact results URL');
+    assert.match(messengerPayload.text,/pickleball session results/i,'Messenger share includes session context');
+
     // Share results image is drawn to canvas, not copied from the dialog DOM or QR element.
     await dp.waitForFunction(()=>!!RF,null,{timeout:5000});
+    await dp.evaluate(()=>{
+      window.__sharedImagePayload=null;
+      Object.defineProperty(navigator,'canShare',{value:payload=>!!payload?.files?.length,configurable:true});
+      Object.defineProperty(navigator,'share',{value:async payload=>{window.__sharedImagePayload=payload},configurable:true});
+    });
+    await resultsDialog.locator('.sh').click();
+    const sharedImage=await dp.evaluate(()=>({title:window.__sharedImagePayload?.title,fileName:window.__sharedImagePayload?.files?.[0]?.name,fileType:window.__sharedImagePayload?.files?.[0]?.type,fileSize:window.__sharedImagePayload?.files?.[0]?.size}));
+    assert.equal(sharedImage.title,'QueueZeroTwo results','Native image share has a results title');
+    assert.equal(sharedImage.fileName,'queuezerotwo-results.png','Native image share sends the results PNG');
+    assert.equal(sharedImage.fileType,'image/png','Native image share sends a PNG file');
+    assert.ok(sharedImage.fileSize>1000,'Native image share sends non-empty PNG content');
+
+    // Verify the desktop PNG download fallback when file sharing is unavailable.
     await dp.evaluate(()=>Object.defineProperty(navigator,'canShare',{value:()=>false,configurable:true}));
     const [imageDownload]=await Promise.all([
       dp.waitForEvent('download'),
