@@ -12,7 +12,7 @@ const api = new Function(
   'S0',
   'let S=S0;const lvl=n=>S.lv[n.toLowerCase()]||0;' +
     html.slice(start, end) +
-    ';return {get S(){return S},set S(v){S=v},pc,oc,split4,refine4,rep4}'
+    ';return {get S(){return S},set S(v){S=v},pc,oc,split4,refine4,rep4,co4}'
 );
 
 function fresh(n, md = 'soc') {
@@ -85,18 +85,19 @@ function simulateLargeRoster(n,games,mode,winnerMode) {
     assert.ok(ix.includes(eligible[0])&&ix.includes(eligible[1]), `${n} players: first two eligible players keep their positions`);
     const chosen=ix.map(i=>A.S.queue[i]);
     const chosenScore=A.rep4(chosen);
-    let minScore=Infinity,minDistance=Infinity;
+    let minScore=Infinity,minCo=Infinity,minDistance=Infinity;
     for(let i=0;i<pool.length;i++) for(let j=i+1;j<pool.length;j++) {
       const candidate=[A.S.queue[eligible[0]],A.S.queue[eligible[1]],A.S.queue[pool[i]],A.S.queue[pool[j]]];
-      const score=A.rep4(candidate);
+      const score=A.rep4(candidate),co=A.co4(candidate);
       const distance=(i+j)*(pool.length+1)+j;
-      if(score<minScore||(score===minScore&&distance<minDistance)) {
-        minScore=score;minDistance=distance;
+      if(score<minScore||(score===minScore&&(co<minCo||(co===minCo&&distance<minDistance)))) {
+        minScore=score;minCo=co;minDistance=distance;
       }
     }
     assert.equal(chosenScore,minScore,`${n} players, game ${g+1}: picker must find the fewest possible teammate repeats across the full queue`);
     const rankA=eligible.indexOf(ix[2])-2,rankB=eligible.indexOf(ix[3])-2;
-    assert.equal((rankA+rankB)*(pool.length+1)+rankB,minDistance,`${n} players, game ${g+1}: tie-break must preserve the closest queue positions`);
+    assert.equal(A.co4(chosen),minCo,`${n} players, game ${g+1}: among equal-partner groups, pick the one who have played together (as partners or opponents) the least`);
+    assert.equal((rankA+rankB)*(pool.length+1)+rankB,minDistance,`${n} players, game ${g+1}: after that, tie-break must preserve the closest queue positions`);
     const teams=A.split4(chosen);
     const partnerCounts=[A.pc(teams[0],teams[1]),A.pc(teams[2],teams[3])];
     const repeated=partnerCounts.filter(count=>count>0).length;
@@ -138,10 +139,12 @@ assert.equal(A.pc(nextRound[0], nextRound[1]), 0, 'Team 1 must rotate away from 
 assert.equal(A.pc(nextRound[2], nextRound[3]), 0, 'Team 2 must rotate away from its previous partner');
 
 // 7. Social Mix is the default, and legacy saved sessions/backups migrate once and disable Winners Stay.
-assert.match(html, /md:'soc',rotationModeVersion:1/, 'new sessions must default to Social Mix');
+assert.match(html, /md:'soc',rotationModeVersion:1/, 'new sessions default to the Shuffle (Social Mix) pairing');
 assert.ok(html.includes("if(S.rotationModeVersion!==1){S.md='soc';S.ws=false;S.rotationModeVersion=1}"), 'legacy saved sessions must migrate to Social Mix once');
-assert.ok(html.includes("R.md=s.rotationModeVersion===1&&s.md==='bal'?'bal':'soc';R.rotationModeVersion=1"), 'legacy backups must migrate while preserving a newer explicit Balanced choice');
-assert.ok(html.includes("R.ws=s.rotationModeVersion===1&&!!s.ws;"), 'legacy backups must disable Winners Stay during the one-time migration');
+assert.ok(html.includes("R.md='soc';R.rotationModeVersion=1"), 'restored backups always use the single Shuffle mode');
+assert.ok(html.includes("R.ws=false;"), 'restored backups always turn Winners Stay off');
+assert.ok(html.includes("R.eq=true;"), 'restored backups always use equal sit-outs');
+assert.ok(html.includes("S.md='soc';S.ws=false;S.eq=true;"), 'saved sessions are normalised to the single Shuffle mode on load');
 assert.ok(html.includes("function smd(m){S.md=m==='soc'?'soc':'bal';S.rotationModeVersion=1;"), 'manual mode changes must be preserved after migration');
 
 console.log(JSON.stringify({pass:true,largeRosterRuns},null,2));
