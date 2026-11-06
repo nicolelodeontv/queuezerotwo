@@ -91,7 +91,7 @@ async function simulateOldCacheToV44(browser,oldVersion) {
   const page = await context.newPage();
   let swFetch = 0;
   const currentSw = fs.readFileSync(path.resolve('sw.js'), 'utf8');
-  assert.match(currentSw,/queuezerotwo-v50/);
+  assert.match(currentSw,/queuezerotwo-v51/);
   const oldSw = `const V='queuezerotwo-v${oldVersion}';self.addEventListener('install',e=>e.waitUntil(caches.open(V).then(c=>c.put('/__queuezerotwo_v${oldVersion}_sentinel__',new Response('v${oldVersion}'))).then(()=>self.skipWaiting())));self.addEventListener('activate',e=>e.waitUntil(self.clients.claim()));`;
   await context.route('**/sw.js', async route => {
     swFetch++;
@@ -109,7 +109,7 @@ async function simulateOldCacheToV44(browser,oldVersion) {
   await page.evaluate(async()=>{const r=await navigator.serviceWorker.getRegistration();await r.update()});
   await page.waitForFunction(async()=>{
     const r=await navigator.serviceWorker.getRegistration();
-    return !!r?.waiting || await caches.has('queuezerotwo-v50');
+    return !!r?.waiting || await caches.has('queuezerotwo-v51');
   },null,{timeout:10000});
   await page.evaluate(async()=>{
     const r=await navigator.serviceWorker.getRegistration();
@@ -117,7 +117,7 @@ async function simulateOldCacheToV44(browser,oldVersion) {
   });
   await page.waitForFunction(async()=>{
     const r=await navigator.serviceWorker.getRegistration();
-    return !!r && !r.waiting && r.active?.state==='activated' && await caches.has('queuezerotwo-v50');
+    return !!r && !r.waiting && r.active?.state==='activated' && await caches.has('queuezerotwo-v51');
   },null,{timeout:10000});
   // The aborted Supabase request must settle before the startup-resume timer
   // fires, leaving one pending state item for queue coalescing to replace.
@@ -127,7 +127,7 @@ async function simulateOldCacheToV44(browser,oldVersion) {
     return q.length===1&&Number.isSafeInteger(q[0]?.payload?.seq);
   },null,{timeout:5000});
   const out=await page.evaluate(async(oldVersion)=>{
-    const cache=await caches.open('queuezerotwo-v50');
+    const cache=await caches.open('queuezerotwo-v51');
     return {
       queue:JSON.parse(localStorage.getItem('queuezerotwo-publish-queue-v1')||'{"items":[]}').items,
       state:JSON.parse(localStorage.getItem('pickleStackState')||'{}'),
@@ -152,7 +152,7 @@ async function finishLogWinnerSelectionRegression(browser) {
   const page=await context.newPage();
   const seed=async(score,options={})=>page.evaluate(({score,options})=>{
     pushS=()=>{};
-    S=mk();
+    S=mk();S.eq=false;
     S.queue=(options.queue||[]).slice();
     S.log=[];
     S.ws=!!options.ws;
@@ -425,7 +425,7 @@ async function mobileEarlyFinishUndoRegression(browser) {
     await page.goto(APP,{waitUntil:'networkidle'});
     await page.evaluate(()=>{
       pushS=()=>{};
-      S=mk();
+      S=mk();S.eq=false;
       Object.assign(S.courts[0],{
         id:1,name:'Court 1',isActive:true,
         players:['Alpha','Beta','Gamma','Delta'],
@@ -601,7 +601,7 @@ async function leaderboardPodiumRegression(browser) {
   try {
     await page.goto(APP, {waitUntil:'networkidle'});
     await page.evaluate(() => {
-      S = mk();
+      S = mk();S.eq=false;
       S.log = [
         {w:0,p:['Alpha','Beta','Gamma','Delta'],s:[11,4],c:'Court 1',tg:11,t:1,d:240000},
         {w:0,p:['Alpha','Beta','Echo','Foxtrot'],s:[11,6],c:'Court 1',tg:11,t:2,d:240000},
@@ -642,7 +642,7 @@ async function playerRotationFairnessRegression(browser) {
     await baselineDialog.getByRole('button',{name:'Close'}).click();
     const outcome=await page.evaluate(()=>{
       pushS=()=>{};
-      S=mk();
+      S=mk();S.eq=false;
       const now=Date.now();
       S.queue=['Ava','Ben','Cara','Dan','Eli','Fay','Gus','Hana','Ivy','Jules','Kai','Lena'];
       S.rest={fay:1};
@@ -653,7 +653,7 @@ async function playerRotationFairnessRegression(browser) {
       Object.assign(S.courts[1],{isActive:true,players:second,score:[3,1],mid:'FAIR002',t:now-180000});
       const records=JSON.parse(JSON.stringify(S.fair));
       const helperState=S;
-      S=mk();
+      S=mk();S.eq=false;
       S.queue=['Queue player','Resting'];
       S.rest={resting:1};
       recordRotationSelection(['Challenger 1','Challenger 2'],['Losing 1','Losing 2']);
@@ -705,7 +705,7 @@ async function sessionFairnessTrendsRegression(browser) {
     await page.goto(APP,{waitUntil:'networkidle'});
     const outcome=await page.evaluate(()=>{
       pushS=()=>{};
-      S=mk();
+      S=mk();S.eq=false;
       const now=Date.now();
       S.name='Saturday Open Play';
       S.queue=['Eli','Fay'];
@@ -869,7 +869,7 @@ async function main() {
     await sp.goto(APP,{waitUntil:'networkidle'});
     // Release 2: identity-free viewer positions, privacy names, rough wait estimates, and compact snapshots.
     const viewerCheck = await sp.evaluate(() => {
-      S=mk();
+      S=mk();S.eq=false;
       S.queue=['Mike Reyes','Mike Rivera','Ana Lopez','Bob Chen','Cara Diaz','Dan Reed','Eli Moss','Fay Cruz'];
       S.log=[
         {p:['Mike Reyes','Ana Lopez','Bob Chen','Cara Diaz'],s:[11,9],w:0,c:'Court 1',tg:11,t:1,d:240000},
@@ -886,7 +886,7 @@ async function main() {
 
     const viewerWinByCheck=await sp.evaluate(()=>{
       const oldS=S,oldSV=SV,oldV=V,oldRA=RA;
-      S=mk();S.wb=2;V=null;RA=null;
+      S=mk();S.eq=false;S.wb=2;V=null;RA=null;
       SV={code:'R2WINBY001',d:{t:11,wb:1,courts:[{n:'Court 1',a:true,p:['Ana','Ben','Cara','Dan'],s:[11,10]}],nx:[],q:[],lb:[]},status:'SUBSCRIBED'};
       renderSession();
       const winByOne=[...document.querySelectorAll('#viewer span.font-sport')].map(el=>el.classList.contains('text-pickle-500'));
@@ -899,7 +899,7 @@ async function main() {
     assert.deepEqual(viewerWinByCheck.winByTwo,[false,false],'win-by-2 viewer does not mark 11-10 as a win');
 
     await sp.evaluate(() => {
-      S=mk();
+      S=mk();S.eq=false;
       S.queue=['Mike Reyes','Mike Rivera','Ana Lopez','Bob Chen','Cara Diaz','Dan Reed','Eli Moss','Fay Cruz'];
       SV={code:'R2VIEWER01',d:{t:11,courts:[{n:'Court 1',a:true,p:['Mike Reyes','Ana Lopez','Bob Chen','Cara Diaz'],s:[5,3]}],nx:['Mike Reyes','Mike Rivera','Ana Lopez','Bob Chen'],up:[{n:'Mike Reyes',p:1},{n:'Mike Rivera',p:2},{n:'Ana Lopez',p:3},{n:'Bob Chen',p:4}],q:S.queue,lb:[{n:'Mike Reyes',w:2,l:0,d:8},{n:'Mike Rivera',w:1,l:1,d:0}],tm:{a:240000}},status:'SUBSCRIBED'};
       V=null;RA=null;render();
@@ -914,7 +914,7 @@ async function main() {
     // The publish contract is exercised against payloads built by the real client helpers.
     const clientPayloadContract=await sp.evaluate(async()=>{
       const oldS=S,oldSV=SV,oldV=V,oldRA=RA,oldStored=localStorage.getItem(K);
-      S=mk();
+      S=mk();S.eq=false;
       const names=['Ari | 東京 🌱','Mika Café|星','Noah | 🥒','Zoë 北'];
       S.queue=names.slice(0,1);
       S.lv={'ari | 東京 🌱':4,'mika café|星':3,'noah | 🥒':2,'zoë 北':5};
@@ -999,7 +999,7 @@ async function main() {
     assert.equal(await sp.locator('#viewer img').count(),0);
 
     await sp.evaluate(() => {
-      S=mk();
+      S=mk();S.eq=false;
       S.log=Array.from({length:100},(_,i)=>({p:[i%2?'Mike Reyes':'Mike Rivera','Player'+((i*3)%38+1),'Player'+((i*5)%38+1),'Player'+((i*7)%38+1)],s:[11,9],w:0,c:'Court '+(i%4+1),tg:11,t:i,d:240000}));
       S.queue=[];
       const p=resultsSnapshot();
@@ -1260,7 +1260,7 @@ async function main() {
     // Regression: an old in-flight publish failure must not poison or stall a fresh session.
     await sp.locator('[role="dialog"] [data-x]').click();
     await sp.evaluate(() => {
-      S = mk();
+      S = mk();S.eq=false;
       S.ended = true;
       S.name = 'Old in-flight session';
       S.sid = 'OLDINFLIGHT';
@@ -1552,7 +1552,7 @@ async function main() {
     assert.equal(await ip.locator('#ncs').inputValue(), '6');
 
     // Mobile: End Session creates the same import-compatible ended-state payload.
-    await ip.evaluate(() => { localStorage.clear(); S=mk(); S.ended=false; sb.rpc=async()=>({data:true,error:null}); render(); });
+    await ip.evaluate(() => { localStorage.clear(); S=mk();S.eq=false; S.ended=false; sb.rpc=async()=>({data:true,error:null}); render(); });
     const mobileEndDialog=ip.locator('[role="dialog"]');
     await ip.locator('#rs').click();
     await mobileEndDialog.getByRole('button', {name: 'Confirm'}).click();
@@ -1628,7 +1628,7 @@ async function main() {
 
     // Release 11: Equal Sit-outs uses fewest games, then longest wait, then queue order.
     await dp.evaluate(() => {
-      S = mk();
+      S = mk();S.eq=false;
       S.eq = true;
       S.queue = ['Alpha','Beta','Gamma','Delta','Epsilon'];
       S.gp = {alpha:2,beta:2,gamma:2,delta:2,epsilon:2};
@@ -1660,7 +1660,7 @@ async function main() {
     // Wait timestamps are created when players check in, cleared when they go to court,
     // and restarted when they return to the waiting stack.
     await dp.evaluate(() => {
-      S = mk();
+      S = mk();S.eq=false;
       S.waiting = ['One','Two','Three','Four'];
       render();
     });
@@ -1758,17 +1758,18 @@ async function main() {
     // The locked Results dialog stays usable on a narrow phone viewport.
     await dp.setViewportSize({width:320,height:640});
     assert.equal(await resultsDialog.locator('.qrb').evaluate(el=>getComputedStyle(el).display),'none','QR is hidden at phone width');
-    // The result sections are intentionally arranged in a horizontal swipe track.
-    // Bring the action section into view before checking its controls against the viewport.
+    // The result sections are stacked vertically (player results on top, then share and actions).
+    // Scroll the action section into view before checking its controls against the viewport.
     const resultsTrack=resultsDialog.locator('.session-results-track');
-    await resultsTrack.evaluate(el=>{el.scrollLeft=el.scrollWidth});
+    await resultsTrack.evaluate(el=>{el.scrollTop=el.scrollHeight});
     await dp.waitForTimeout(100);
     const actionPanel=resultsDialog.locator('.session-results-action-panel');
     const actionRect=await actionPanel.evaluate(el=>{const r=el.getBoundingClientRect();return {x:r.x,right:r.right}});
-    assert.ok(actionRect.x>=0&&actionRect.right<=320,'Session actions panel is reachable within the 320px viewport after horizontal swipe');
+    assert.ok(actionRect.x>=0&&actionRect.right<=320,'Session actions panel fits the 320px viewport width');
     for (const [selector,label] of [['.sh','Share results image'],['.rb','Export backup'],['.nw','New session']]) {
       const button=resultsDialog.locator(selector);
       await button.waitFor({state:'visible',timeout:5000});
+      await button.scrollIntoViewIfNeeded();
       assert.equal(await button.isVisible(),true,label+' remains visible at 320px');
       const rect=await button.evaluate(el=>{const r=el.getBoundingClientRect();return {x:r.x,y:r.y,right:r.right,bottom:r.bottom,height:r.height}});
       assert.ok(rect.x>=0&&rect.right<=320&&rect.y>=0&&rect.bottom<=640,label+' stays inside the 320px viewport');

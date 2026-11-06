@@ -18,7 +18,7 @@
     77
   ],
   "currentBranch": "main",
-  "currentCache": "queuezerotwo-v50",
+  "currentCache": "queuezerotwo-v51",
   "allocations": [
     {
       "cache": "queuezerotwo-v1",
@@ -298,6 +298,12 @@
     },
     {
       "cache": "queuezerotwo-v50",
+      "status": "assigned",
+      "pr": null,
+      "branch": "main"
+    },
+    {
+      "cache": "queuezerotwo-v51",
       "status": "assigned",
       "pr": null,
       "branch": "main"
