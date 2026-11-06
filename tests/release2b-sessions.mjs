@@ -1813,7 +1813,7 @@ async function main() {
     });
     await resultsDialog.locator('.fb').click();
     const facebookShareUrl=await dp.evaluate(()=>window.__openedShareUrl);
-    assert.match(facebookShareUrl,/^https:\/\/www\\.facebook\\.com\/sharer\/sharer\\.php\\?u=/,'Facebook opens its share dialog');
+    assert.ok(facebookShareUrl.startsWith('https://www.facebook.com/sharer/sharer.php?u='),'Facebook opens its share dialog');
     assert.equal(new URL(facebookShareUrl).searchParams.get('u'),expectedResultsUrl,'Facebook receives the exact results URL');
 
     await dp.evaluate(()=>{
