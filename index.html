@@ -263,6 +263,11 @@ html[data-theme=light]{color-scheme:light}
  #msg>*{font-size:.8rem;padding:.6rem .8rem}
 }
 .session-results-header input{text-overflow:ellipsis}
+/* Touch targets: enlarge the tiny court-rename pencil without moving the layout. */
+@media(pointer:coarse),(max-width:1023px){
+ button[onclick^="ren("]{position:relative}
+ button[onclick^="ren("]::after{content:"";position:absolute;inset:-14px}
+}
 /* Session Results layout: player results full width on top; share + actions in a row below. */
 .session-results-track{display:flex;flex-wrap:wrap;align-content:flex-start;align-items:stretch;gap:1rem}
 .session-results-leaderboard{flex:1 1 100%;min-height:0;justify-content:flex-start}
@@ -869,7 +874,10 @@ function showRes(){
 /* Stack */
 /* Attendance */
 function checkIn(i){const p=S.waiting.splice(i,1)[0];if(!p)return;S.queue.push(p);markWaiting([p]);save();render();toast(p+' checked in','success')}
-function rmWaiting(i){S.waiting.splice(i,1);save();render()}
+function undoToast(m,fn){const t=document.createElement('div');t.className='mb border px-4 py-3 rounded-lg shadow-xl pointer-events-auto text-sm font-medium bg-dark-700 border-dark-700 flex items-center justify-between gap-3';
+const sp=document.createElement('span');sp.textContent=m;const b=document.createElement('button');b.type='button';b.textContent='Undo';b.className='rounded-lg bg-pickle-500 text-dark-900 font-bold px-3 py-1.5';
+b.onclick=()=>{t.remove();fn()};t.append(sp,b);$('msg').append(t);setTimeout(()=>t.remove(),6000)}
+function rmWaiting(i){const p=S.waiting.splice(i,1)[0];if(p===undefined)return;save();render();undoToast(p+' removed',()=>{S.waiting.splice(Math.min(i,S.waiting.length),0,p);save();render()})}
 function addNames(v){const n=v.split(/[,\n]/).map(s=>s.trim()).filter(Boolean);if(!n.length)return 0;S.waiting.push(...n.map(q=>{const[a,t]=q.split('|').map(x=>x.trim()),x=parseFloat(t);if(x)S.lv[a.toLowerCase()]=x<2.25?1:x<2.75?2:x<3.25?3:x<3.75?4:x<4.25?5:6;return a}).filter(Boolean));save();render();return n.length}
 $('f').onsubmit=e=>{e.preventDefault();if(addNames($('pn').value))$('pn').value=''};
 /* Add Player button (phones): same behavior as the form, stays open so you can add several */
@@ -877,7 +885,7 @@ function addPl(){
   const d=modal('<form class="p-6"><h3 class="text-xl text-white mb-1">Add players</h3><p class="text-xs text-gray-400 mb-4">Separate names with commas, or use Ana | 3.5 to set a rating. They go to Not yet here until checked in.</p><input class="n w-full bg-dark-900 border border-dark-700 rounded-lg px-4 py-3 text-white focus:outline-none focus:border-pickle-500" placeholder="Name, several with commas, or Ana | 3.5" autocomplete="off" enterkeyhint="done"><p class="ok text-xs text-pickle-500 mt-2 min-h-[1rem]"></p><div class="flex gap-3 mt-3"><button type="button" data-x class="flex-1 '+bS+'">Done</button><button class="flex-1 '+bP+'">Add</button></div></form>');
   const i=d.querySelector('.n'),ok=d.querySelector('.ok');i.focus();
   d.querySelector('form').onsubmit=e=>{e.preventDefault();const v=i.value,c=addNames(v);if(c){ok.textContent=c+(c>1?' players':' player')+' added: '+v.split(/[,\n]/).map(s=>s.split('|')[0].trim()).filter(Boolean).join(', ');i.value=''}i.focus()}}
-function rm(i){const p=S.queue.splice(i,1)[0];if(p)clearWaiting([p]);save();render()}
+function rm(i){const p=S.queue.splice(i,1)[0];if(!p)return;const wt=S.wt&&S.wt[wk(p)];clearWaiting([p]);save();render();undoToast(p+' removed',()=>{S.queue.splice(Math.min(i,S.queue.length),0,p);if(wt!==undefined){S.wt=S.wt||{};S.wt[wk(p)]=wt}save();render()})}
 $('go').onclick=()=>{
 if(pick4().length<4)return toast('Need at least 4 players who are not resting.','error');
 const c=S.courts.find(c=>!c.isActive);if(!c)return toast('No court free. Finish a match first.','error');
