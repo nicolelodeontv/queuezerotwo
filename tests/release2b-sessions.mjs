@@ -1757,7 +1757,11 @@ async function main() {
 
     // The locked Results dialog stays usable on a narrow phone viewport.
     await dp.setViewportSize({width:320,height:640});
-    assert.equal(await resultsDialog.locator('.qrb').evaluate(el=>getComputedStyle(el).display),'none','QR is hidden at phone width');
+    const resultsQr=resultsDialog.locator('.qrb');
+    assert.notEqual(await resultsQr.evaluate(el=>getComputedStyle(el).display),'none','Results QR remains visible at phone width');
+    assert.ok(await resultsQr.locator('svg').count(),'Results QR SVG is rendered at phone width');
+    const qrRect=await resultsQr.evaluate(el=>{const r=el.getBoundingClientRect();return {width:r.width,height:r.height}});
+    assert.ok(qrRect.width>=72&&qrRect.height>=72,'Results QR remains large enough to scan on a phone');
     // The result sections are intentionally arranged in a horizontal swipe track.
     // Bring the action section into view before checking its controls against the viewport.
     const resultsTrack=resultsDialog.locator('.session-results-track');
