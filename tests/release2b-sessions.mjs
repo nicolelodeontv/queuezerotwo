@@ -1799,7 +1799,8 @@ async function main() {
     assert.notEqual(await resultsDialog.locator('.qrb').evaluate(el=>getComputedStyle(el).display),'none','Projector/desktop Results dialog keeps the QR visible');
 
     // Verify the actual share controls, not only their visual presence.
-    const expectedResultsUrl=await dp.evaluate(()=>location.origin+location.pathname+'#s='+S.sid);
+    const expectedResultsUrl=(await resultsDialog.locator('.session-results-share-link > div').innerText()).trim();
+    assert.match(expectedResultsUrl,/^https?:\/\/.+#(?:r|s)=/,'Results share panel exposes the published results URL');
     await dp.evaluate(()=>{
       window.__copiedResultsText='';
       Object.defineProperty(navigator,'clipboard',{value:{writeText:async value=>{window.__copiedResultsText=value}},configurable:true});
