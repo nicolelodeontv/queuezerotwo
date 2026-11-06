@@ -791,7 +791,7 @@ async function shareResultsLink(target,url){
   if(!url)return toast('Results link is not available yet.','error');
   if(target==='facebook'){
     const shareUrl='https://www.facebook.com/sharer/sharer.php?u='+encodeURIComponent(url);
-    const win=window.open(shareUrl,'_blank','noopener,noreferrer');
+    const win=window.open(shareUrl,'_blank','popup,width=720,height=640');if(win)win.opener=null;
     if(!win){const ok=await copyShareText(url);toast(ok?'Results link copied. Paste it into Facebook.':'Allow pop-ups to share on Facebook.','info')}return
   }
   if(target==='messenger'){
