@@ -85,6 +85,13 @@ try{
  await resultsDialog.getByRole('button',{name:/Messenger/i}).click();
  await page.waitForFunction(()=>!!window.__sharedPayload&&window.__sharedPayload.url.includes('#r=QZTTEST123'));
  assert.match(await page.evaluate(()=>window.__sharedPayload.title),/QueueZeroTwo/);
+ await page.evaluate(()=>{window.__imageShare=null;Object.defineProperty(navigator,'canShare',{configurable:true,value:payload=>!!payload.files?.length});Object.defineProperty(navigator,'share',{configurable:true,value:async payload=>{window.__imageShare=payload}})});
+ await resultsDialog.getByRole('button',{name:/Share results image/i}).click();
+ await page.waitForFunction(()=>!!window.__imageShare?.files?.length);
+ const imagePayload=await page.evaluate(()=>({title:window.__imageShare.title,type:window.__imageShare.files[0].type,name:window.__imageShare.files[0].name}));
+ assert.equal(imagePayload.type,'image/png');
+ assert.match(imagePayload.name,/queuezerotwo-results\.png/);
+ await page.evaluate(()=>Object.defineProperty(navigator,'canShare',{configurable:true,value:()=>false}));
  const [imageDownload]=await Promise.all([
   page.waitForEvent('download'),
   resultsDialog.getByRole('button',{name:/Share results image/i}).click()
