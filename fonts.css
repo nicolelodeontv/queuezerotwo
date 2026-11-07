@@ -1,0 +1,3 @@
+/* Self-hosted Latin subsets of Inter (400-600) and Oswald (500-700). SIL Open Font License; see fonts/OFL-*.txt */
+@font-face{font-family:Inter;font-style:normal;font-weight:400 600;font-display:swap;src:url(/fonts/inter-latin.woff) format("woff")}
+@font-face{font-family:Oswald;font-style:normal;font-weight:500 700;font-display:swap;src:url(/fonts/oswald-latin.woff) format("woff")}
