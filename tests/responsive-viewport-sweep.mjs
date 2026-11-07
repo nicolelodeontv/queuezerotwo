@@ -25,15 +25,15 @@ const page = await context.newPage();
 const fontResponses = [];
 page.on('response', response => {
   const url = new URL(response.url());
-  if (url.hostname === 'fonts.googleapis.com' || url.hostname === 'fonts.gstatic.com') {
-    fontResponses.push({ host: url.hostname, status: response.status() });
+  if (url.pathname === '/fonts.css' || url.pathname.startsWith('/fonts/')) {
+    fontResponses.push({ host: url.pathname, status: response.status() });
   }
 });
 await context.route('**/*', route => {
   const url = new URL(route.request().url());
   if (url.hostname.endsWith('.supabase.co')) return route.abort();
   if (FONT_MODE === 'blocked' &&
-      (url.hostname === 'fonts.googleapis.com' || url.hostname === 'fonts.gstatic.com')) return route.abort();
+      (url.pathname === '/fonts.css' || url.pathname.startsWith('/fonts/'))) return route.abort();
   return route.continue();
 });
 
@@ -70,12 +70,12 @@ try {
   const results = [];
 
   if (FONT_MODE === 'blocked') {
-    if (fontResponses.length) failures.push({ font: 'blocked mode unexpectedly received Google Fonts responses', fontResponses });
+    if (fontResponses.length) failures.push({ font: 'blocked mode unexpectedly received self-hosted font responses', fontResponses });
   } else {
-    const cssLoaded = fontResponses.some(r => r.host === 'fonts.googleapis.com' && r.status >= 200 && r.status < 300);
-    const binaryLoaded = fontResponses.some(r => r.host === 'fonts.gstatic.com' && r.status >= 200 && r.status < 300);
+    const cssLoaded = fontResponses.some(r => r.host === '/fonts.css' && r.status >= 200 && r.status < 300);
+    const binaryLoaded = fontResponses.some(r => r.host.startsWith('/fonts/') && r.host.endsWith('.woff') && r.status >= 200 && r.status < 300);
     const oswaldLoaded = fontProbe.faces.some(face => /Oswald/i.test(face.family) && face.status === 'loaded');
-    if (!cssLoaded) failures.push({ font: 'Google Fonts stylesheet was not fetched successfully', fontResponses, fontProbe });
+    if (!cssLoaded) failures.push({ font: 'Font stylesheet was not fetched successfully', fontResponses, fontProbe });
     if (!binaryLoaded || !oswaldLoaded) failures.push({ font: 'Oswald web font did not load; enabled mode must exercise the web-font layout', fontResponses, fontProbe });
   }
 
