@@ -306,6 +306,8 @@ html[data-theme=light]{color-scheme:light}
  .session-results-dialog .session-results-actions>button{font-size:.7rem}
 }
 
+.results-head-meta{display:flex;flex-direction:column;align-items:flex-end;flex:none}
+@media(max-width:639px){.results-head{flex-direction:column;text-align:center}.results-head-meta{align-items:center;flex-direction:row;gap:.6rem;flex-wrap:wrap;justify-content:center}.results-head-meta span{margin-top:0!important}}
 </style>
 <link rel="stylesheet" href="/tailwind.css">
 <link rel="manifest" href="/manifest.webmanifest">
@@ -807,7 +809,9 @@ async function resImg(){
   const T=(t,px,py,sz,c,al,sp)=>{x.font=(sp?'700 '+sz+'px Oswald,sans-serif':'600 '+sz+'px Inter,sans-serif');x.fillStyle=c;x.textAlign=al||'left';x.fillText(t,px,py)};
   const fit=(t,w)=>{x.font='600 38px Inter,sans-serif';while(t.length>1&&x.measureText(t).width>w)t=t.slice(0,-1);return t};
   const box=(a,b,w,h,c,rad)=>{x.fillStyle=c;x.beginPath();if(x.roundRect)x.roundRect(a,b,w,h,rad);else x.rect(a,b,w,h);x.fill()};
-  T('QUEUEZEROTWO',W/2,115,68,'#ccff00','center',1);T(S.name||'Session Results',W/2,170,34,'#94a3b8','center');
+  x.font='700 68px Oswald,sans-serif';const tw=x.measureText('QUEUEZEROTWO').width,ic=92,gap=26,sx=(W-(ic+gap+tw))/2;
+  x.save();x.translate(sx+ic/2,44+ic/2);x.rotate(12*Math.PI/180);box(-ic/2,-ic/2,ic,ic,'#ccff00',20);x.translate(-27,-27);x.scale(54/512,54/512);x.fillStyle='#0B0F19';x.fill(new Path2D('m97 127 67.4-67.4c38.2-38.2 90-59.6 144-59.6 112.5 0 203.7 91.2 203.7 203.6 0 46.4-15.8 91.1-44.5 127-23.6-16.8-52.4-26.7-83.5-26.7s-59.9 9.9-83.4 26.6zm143 321c0 9.7 1 19.1 2.8 28.2-19.8-5.2-38-15.5-52.7-30.2-12.2-12.2-31.9-12.2-44.1 0l-49.4 49.4C86 506 71.6 512 56.6 512 25.4 512 0 486.7 0 455.4c0-15 6-29.4 16.6-40L66 366c12.2-12.2 12.2-31.9 0-44.1-21.7-21.7-33.9-51.2-33.9-81.9 0-29.4 11.1-57.6 31.1-79l203.4 203.6C249.9 388.1 240 416.9 240 448m144-96a96 96 0 1 1 0 192 96 96 0 1 1 0-192'));x.restore();
+  T('QUEUEZEROTWO',sx+ic+gap+tw/2,115,68,'#ccff00','center',1);T(S.name||'Session Results',W/2,170,34,'#94a3b8','center');
   box(60,210,960,150,'#1E293B',24);
   T(String(r.length),W/3,295,64,'#ffffff','center',1);T('PLAYERS',W/3,335,24,'#94a3b8','center');
   T(String(S.log.length),2*W/3,295,64,'#ffffff','center',1);T('GAMES',2*W/3,335,24,'#94a3b8','center');
@@ -1553,7 +1557,7 @@ function renderArchivedResults(){
   }).join('');
   const t=d.totals&&typeof d.totals==='object'?d.totals:{};
   const expires=RA.expires?new Date(RA.expires).toLocaleDateString():'available for 30 days';
-  $('viewer').innerHTML='<div class="flex justify-between items-center mb-5"><div><h2 class="text-2xl text-white">'+esc(d.name||'Session Results')+'</h2><p class="text-xs text-gray-400">'+num(t.players)+' players · '+num(t.games)+' games · '+num(t.courts)+' courts</p><p class="text-xs text-gray-500 mt-1">Read-only results · '+(RA.expires?'available until '+expires:expires)+'</p></div><span class="text-xs font-bold text-gray-400 bg-dark-700 rounded-full px-2 py-1">READ-ONLY</span><span class="text-xs text-gray-500 mt-1 block">Available for 30 days</span></div><div class="bg-dark-800 border border-dark-700 rounded-2xl mb-6"><div class="session-results-strip p-4">'+(rows||'<p class="p-6 text-center text-sm text-gray-400" style="grid-column:1/-1">No scored matches.</p>')+'</div></div><h3 class="text-xl text-white mb-2">Match Log</h3><div class="bg-dark-800 border border-dark-700 rounded-2xl divide-y divide-dark-700 mb-6">'+(games||'<p class="p-6 text-center text-sm text-gray-400">No matches.</p>')+'</div><a href="'+location.pathname+'" class="inline-block text-sm text-pickle-500 underline">Open QueueZeroTwo</a>'
+  $('viewer').innerHTML='<div class="results-head flex justify-between items-center gap-3 mb-5"><div><h2 class="text-2xl text-white">'+esc(d.name||'Session Results')+'</h2><p class="text-xs text-gray-400">'+num(t.players)+' players · '+num(t.games)+' games · '+num(t.courts)+' courts</p><p class="text-xs text-gray-500 mt-1">Read-only results · '+(RA.expires?'available until '+expires:expires)+'</p></div><div class="results-head-meta"><span class="text-xs font-bold text-gray-400 bg-dark-700 rounded-full px-2 py-1 whitespace-nowrap">READ-ONLY</span><span class="text-xs text-gray-500 mt-1 block">Available for 30 days</span></div></div><div class="bg-dark-800 border border-dark-700 rounded-2xl mb-6"><div class="session-results-strip p-4">'+(rows||'<p class="p-6 text-center text-sm text-gray-400" style="grid-column:1/-1">No scored matches.</p>')+'</div></div><h3 class="text-xl text-white mb-2">Match Log</h3><div class="bg-dark-800 border border-dark-700 rounded-2xl divide-y divide-dark-700 mb-6">'+(games||'<p class="p-6 text-center text-sm text-gray-400">No matches.</p>')+'</div><a href="'+location.pathname+'" class="inline-block text-sm text-pickle-500 underline">Open QueueZeroTwo</a>'
 }
 const scoreHtml=(a,b,x)=>a===0&&b===0?'<span class="text-xs text-gray-400 px-2 whitespace-nowrap">No score</span>':'<span class="font-sport text-lg '+x+'">'+a+'-'+b+'</span>';
 const winsHtml=n=>'<div class="text-green-400 leading-none"><span class="font-sport text-3xl">'+n+'</span> <span class="text-sm">'+(n===1?'win':'wins')+'</span></div>';
