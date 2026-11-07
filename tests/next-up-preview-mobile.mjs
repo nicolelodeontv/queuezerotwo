@@ -135,7 +135,7 @@ try {
           const panel=document.querySelector('#sun');
           const preview=document.querySelector('#qpreview');
           const cards=[...document.querySelectorAll('#qpreviewGroups .qpreview-group')];
-          const actionButtons=[...document.querySelectorAll('#sun button')].filter(b=>getComputedStyle(b).display!=='none');
+          const actionButtons=[...document.querySelectorAll('#sun button')].filter(b=>b.getClientRects().length>0);
           return {
             width:innerWidth,
             rootScrollWidth:document.documentElement.scrollWidth,
