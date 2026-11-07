@@ -1093,7 +1093,7 @@ toast('Voice announcements '+(S.tts?'on':'off'),'info')}
 function callMatch(c){say(c.name+'. '+tm(c.players,0)+' versus '+tm(c.players,1)+'.')}
 function callWin(c){const w=win(c.score,S.target);if(w>=0)say(c.name+', game over. '+tm(c.players,w)+' win, '+c.score[w]+' to '+c.score[1-w]+'.')}
 function nextText(){const ix=pick4();if(ix.length<4)return '';const t=split4(ix.map(i=>S.queue[i]));return 'Next up: '+tm(t,0)+' versus '+tm(t,1)+'.'}
-function callNext(n){const t=nextText();say(n+' is free.'+(t?' '+t:''))}
+function callNext(n){const t=nextText();beep(520,.12);setTimeout(()=>beep(780,.16),160);say(n+' is free.'+(t?' '+t:''))}
 function announceNext(){if(!ttsOk)return toast('This browser has no speech support.','error');
 const t=nextText();if(!t)return toast('Add at least 4 players to announce the next teams.','error');
 const c=S.courts.find(x=>!x.isActive);say(t+(c?' Please head to '+c.name+'.':''),true)}
@@ -1652,15 +1652,25 @@ function archive(){
  if(S.log.length)h.unshift({id:Math.random().toString(36).slice(2,8),name:S.name||new Date().toLocaleDateString([],{weekday:'short',month:'short',day:'numeric'}),t:Date.now(),g:S.log.length,top:stats().slice(0,10).map(p=>({n:p.n,w:p.w,l:p.l})),fairness:sessionFairnessSnapshot()});
  return h.slice(0,30)
 }
+function seasonBoard(){
+ const m=new Map(),add=(n,w,l)=>{const k=String(n||'').trim().toLowerCase();if(!k)return;const r=m.get(k)||{n:String(n).trim(),s:0,w:0,l:0};r.s++;r.w+=w;r.l+=l;m.set(k,r)};
+ (S.hist||[]).forEach(x=>(x.top||[]).forEach(p=>add(p.n,p.w,p.l)));
+ if(S.log.length)stats().forEach(p=>add(p.n,p.w,p.l));
+ const rows=[...m.values()].filter(r=>r.w+r.l>0).sort((a,b)=>(b.w-a.w)||((b.w/(b.w+b.l))-(a.w/(a.w+a.l)))||a.n.localeCompare(b.n));
+ const body=rows.length?'<table class="w-full text-sm"><thead class="text-xs text-gray-400"><tr><th class="p-3 text-left">#</th><th class="text-left">Player</th><th>Sessions</th><th>W-L</th><th>Win%</th></tr></thead><tbody>'+rows.slice(0,50).map((r,i)=>'<tr class="border-t border-dark-700 text-center"><td class="p-3 text-left text-gray-400">'+(i+1)+'</td><td class="text-left text-white">'+esc(r.n)+'</td><td>'+r.s+'</td><td>'+r.w+'-'+r.l+'</td><td>'+Math.round(r.w/(r.w+r.l)*100)+'%</td></tr>').join('')+'</tbody></table>':'<p class="p-6 text-sm text-gray-400 text-center">No finished matches yet. Play a session first.</p>';
+ modal('<div class="p-5 border-b border-dark-700"><h3 class="text-2xl text-white">Season leaderboard</h3><p class="text-xs text-gray-400 mt-1">All saved sessions plus the current one. Each saved session keeps its top 10 players.</p></div><div class="max-h-[60vh] overflow-y-auto">'+body+'</div><div class="p-4 border-t border-dark-700"><button data-x class="w-full '+bS+'">Close</button></div>')
+}
 function hist(){
  const h=S.hist||[];
  const rows=h.length?h.map((x,i)=>{
   const fair=x.fairness,score=fair&&Number.isFinite(fair.score)?'<span class="text-pickle-400"> · '+fair.score+'/100 fairness</span>':'<span class="text-gray-500"> · No fairness snapshot</span>';
   return '<div class="p-4"><div class="flex justify-between gap-3"><div class="min-w-0"><div class="text-white truncate">'+esc(x.name)+'</div><div class="text-xs text-gray-400">'+new Date(x.t).toLocaleDateString()+' · '+x.g+' games'+score+'</div></div><button data-del="'+i+'" class="text-xs text-gray-400 hover:text-red-400" aria-label="Delete this session">Delete</button></div><ol class="mt-2 text-sm text-gray-300 space-y-0.5">'+x.top.slice(0,3).map((p,j)=>'<li>'+['🥇','🥈','🥉'][j]+' '+esc(p.n)+' <span class="text-gray-400">'+p.w+'W '+p.l+'L</span></li>').join('')+'</ol></div>'
  }).join(''):'<p class="p-6 text-sm text-gray-400 text-center">No past sessions yet. End a session, then tap New session, to save one here.</p>';
+ const seasonButton=(h.length||S.log.length)?'<button class="show-season w-full '+bP+'"><i class="fa-solid fa-trophy"></i> Season leaderboard</button>':'';
  const trendButton=h.some(x=>x.fairness)?'<button class="show-trends w-full '+bP+'"><i class="fa-solid fa-chart-line"></i> Compare fairness trends</button>':'';
- const d=modal('<div class="p-5 border-b border-dark-700"><h3 class="text-2xl text-white">Past sessions</h3></div><div class="divide-y divide-dark-700 max-h-[60vh] overflow-y-auto">'+rows+'</div><div class="p-4 border-t border-dark-700 space-y-2">'+trendButton+'<button data-x class="w-full '+bS+'">Close</button></div>');
+ const d=modal('<div class="p-5 border-b border-dark-700"><h3 class="text-2xl text-white">Past sessions</h3></div><div class="divide-y divide-dark-700 max-h-[60vh] overflow-y-auto">'+rows+'</div><div class="p-4 border-t border-dark-700 space-y-2">'+seasonButton+trendButton+'<button data-x class="w-full '+bS+'">Close</button></div>');
  d.querySelectorAll('[data-del]').forEach(b=>b.onclick=()=>ask('Delete this session?','Its saved results and fairness snapshot will be removed from this device.',()=>{S.hist.splice(+b.dataset.del,1);save();d.__close();hist()}));
+ const season=d.querySelector('.show-season');if(season)season.onclick=()=>{d.__close();seasonBoard()};
  const trends=d.querySelector('.show-trends');if(trends)trends.onclick=()=>{d.__close();fairnessTrends()}
 }
 function fairnessTrends(){
