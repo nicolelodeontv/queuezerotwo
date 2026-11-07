@@ -369,10 +369,8 @@ html[data-theme=light]{color-scheme:light}
 <div id="rcol" class="lg:col-span-8 space-y-10">
 <section id="sun" class="bg-dark-800 rounded-2xl border border-dark-700 p-5">
 <div class="flex flex-wrap justify-between items-center gap-3 mb-4"><div><h2 class="text-2xl text-white">Up Next</h2><p class="text-gray-400 text-sm">Teams for the next four eligible players. Resting players are skipped.</p></div>
-<div class="flex items-center gap-2 text-xs flex-wrap"><span class="hidden" aria-hidden="true"><button id="mdb" onclick="smd('bal')" tabindex="-1">Balanced</button><button id="mds" onclick="smd('soc')" tabindex="-1">Social mix</button></span><button onclick="rotationFairness()" title="Review player games, sit-outs and waiting time" class="px-3 py-1.5 rounded-lg border border-dark-700 text-gray-300 hover:border-pickle-500"><i class="fa-solid fa-scale-balanced"></i> Fairness</button><button onclick="fairnessTrends()" title="Compare fairness across past sessions" class="px-3 py-1.5 rounded-lg border border-dark-700 text-gray-300 hover:border-pickle-500"><i class="fa-solid fa-chart-line"></i> Trends</button><button onclick="shuf()" class="px-3 py-1.5 rounded-lg border border-dark-700 text-gray-300 hover:border-pickle-500"><i class="fa-solid fa-shuffle"></i> Reshuffle</button><button onclick="announceNext()" title="Say the next teams out loud" class="px-3 py-1.5 rounded-lg border border-dark-700 text-gray-300 hover:border-pickle-500"><i class="fa-solid fa-bullhorn"></i> Announce</button></div></div>
+<div class="flex items-center gap-2 text-xs flex-wrap"><button onclick="rotationFairness()" title="Review player games, sit-outs and waiting time" class="px-3 py-1.5 rounded-lg border border-dark-700 text-gray-300 hover:border-pickle-500"><i class="fa-solid fa-scale-balanced"></i> Fairness</button><button onclick="fairnessTrends()" title="Compare fairness across past sessions" class="px-3 py-1.5 rounded-lg border border-dark-700 text-gray-300 hover:border-pickle-500"><i class="fa-solid fa-chart-line"></i> Trends</button><button onclick="shuf()" class="px-3 py-1.5 rounded-lg border border-dark-700 text-gray-300 hover:border-pickle-500"><i class="fa-solid fa-shuffle"></i> Reshuffle</button><button onclick="announceNext()" title="Say the next teams out loud" class="px-3 py-1.5 rounded-lg border border-dark-700 text-gray-300 hover:border-pickle-500"><i class="fa-solid fa-bullhorn"></i> Announce</button></div></div>
 <p id="mdi" class="text-xs text-gray-400 mb-3"></p>
-<div class="hidden" aria-hidden="true"><button id="wsb" onclick="tws()" tabindex="-1"></button><button id="eqb" onclick="teq()" tabindex="-1"></button><label id="wlw" class="text-gray-400 flex items-center gap-1">Max wins in a row <select id="wls" onchange="swl(+this.value)" class="bg-dark-900 border border-dark-700 rounded px-2 py-1 text-white"><option value="0">No limit</option><option value="2">2</option><option value="3">3</option><option value="4">4</option></select></label></div>
-<p id="wsi" class="text-xs text-gray-400 mb-4 hidden"></p>
 <div id="unxb" class="min-h-[105px]"></div>
 <div id="qpreview" class="mt-4 rounded-xl border border-dark-700 bg-dark-900/40 p-4" aria-live="polite">
   <div class="flex flex-wrap items-center justify-between gap-2 mb-3">
@@ -1073,10 +1071,6 @@ function refine4(ix){
  return best.sort((a,b)=>a-b)
 }
 function takeNext(){const ix=pick4(),nm4=ix.map(i=>S.queue[i]),t=split4(nm4);recordRotationSelection(nm4);for(let k=ix.length-1;k>=0;k--)S.queue.splice(ix[k],1);nm4.forEach(gpi);clearWaiting(nm4);S.sd++;return t}
-function smd(m){S.md=m==='soc'?'soc':'bal';S.rotationModeVersion=1;save();render()}
-function tws(){S.ws=!S.ws;save();render()}
-function teq(){S.eq=!S.eq;save();render()}
-function swl(v){S.wl=v;save();render()}
 let AC,MG=1;const son=()=>S.snd!==false;
 function beep(f,d){if(!son())return;try{AC=AC||new(window.AudioContext||window.webkitAudioContext)();const o=AC.createOscillator(),g=AC.createGain();o.frequency.value=f;g.gain.value=.15;o.connect(g);g.connect(AC.destination);o.start();o.stop(AC.currentTime+d)}catch(e){}}
 function buzz(p){if(S.hap===false||!navigator.vibrate||matchMedia('(prefers-reduced-motion: reduce)').matches)return;try{navigator.vibrate(p)}catch(_){} }
@@ -1113,7 +1107,6 @@ return `<div class="flex items-center gap-3 p-4 ${rk<=3?'bg-pickle-500/10':''}">
 box.querySelectorAll('[data-x]').forEach(b=>b.onclick=()=>d.__close());box.querySelector('.mg').onchange=e=>{MG=+e.target.value;draw()}};
 draw()}
 function shuf(){S.sd++;save();render()}
-function setLv(i,v){S.lv[S.queue[i].toLowerCase()]=v;save();render()}
 function previewFollowingGroups(limit=3){
  const live=S,following=[];
  try{
@@ -1145,14 +1138,6 @@ function renderQueuePreview(currentCount){
  $('qpreviewRest').innerHTML=resting.length?'<span class="text-orange-400 font-semibold">Resting · skipped ('+resting.length+'):</span> '+resting.map(esc).join(', '):'<span class="text-green-400 font-semibold">Resting:</span> Nobody. All checked-in players are eligible.';
 }
 function renderNext(){const q=S.queue;
-$('mdb').className='px-3 py-1.5 rounded-lg border '+(S.md=='bal'?'bg-pickle-500 text-dark-900 border-pickle-500 font-semibold':'border-dark-700 text-gray-300');
-$('mds').className='px-3 py-1.5 rounded-lg border '+(S.md=='soc'?'bg-pickle-500 text-dark-900 border-pickle-500 font-semibold':'border-dark-700 text-gray-300');
-const tg2=(el,on)=>$(el).className='px-3 py-1.5 rounded-lg border '+(on?'bg-pickle-500 text-dark-900 border-pickle-500 font-semibold':'border-dark-700 text-gray-300');
-$('wsb').innerHTML='<i class="fa-solid fa-crown"></i> Winners stay: '+(S.ws?'On':'Off');tg2('wsb',S.ws);
-$('eqb').innerHTML='<i class="fa-solid fa-scale-balanced"></i> Equal sit-outs: '+(S.eq?'On':'Off');tg2('eqb',S.eq);
-$('wlw').classList.toggle('hidden',!S.ws);$('wls').value=String(S.wl);
-const wi=(S.ws?'Winners keep their court and the next two players challenge them. '+(S.wl?'After '+S.wl+' wins in a row the pair splits up and goes to the back. ':''):'')+(S.eq?'Equal sit-outs: fewest games first → longest wait → stack order.':'');
-$('wsi').classList.add('hidden');
 $('mdi').innerHTML='<b class="text-gray-200">Shuffle:</b> partners and opponents change every game, so you play with as many different people as possible. Players with the fewest games go on first, then whoever has waited longest.';
 const ix=pick4();if(ix.length<4){$('unxb').innerHTML='<p class="text-sm text-gray-400">Add at least 4 players to see the next teams.</p>';renderQueuePreview(ix.length);return}
 const t=split4(ix.map(i=>q[i]));

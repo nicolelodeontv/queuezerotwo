@@ -91,7 +91,7 @@ async function simulateOldCacheToV44(browser,oldVersion) {
   const page = await context.newPage();
   let swFetch = 0;
   const currentSw = fs.readFileSync(path.resolve('sw.js'), 'utf8');
-  assert.match(currentSw,/queuezerotwo-v53/);
+  assert.match(currentSw,/queuezerotwo-v54/);
   const oldSw = `const V='queuezerotwo-v${oldVersion}';self.addEventListener('install',e=>e.waitUntil(caches.open(V).then(c=>c.put('/__queuezerotwo_v${oldVersion}_sentinel__',new Response('v${oldVersion}'))).then(()=>self.skipWaiting())));self.addEventListener('activate',e=>e.waitUntil(self.clients.claim()));`;
   await context.route('**/sw.js', async route => {
     swFetch++;
@@ -109,7 +109,7 @@ async function simulateOldCacheToV44(browser,oldVersion) {
   await page.evaluate(async()=>{const r=await navigator.serviceWorker.getRegistration();await r.update()});
   await page.waitForFunction(async()=>{
     const r=await navigator.serviceWorker.getRegistration();
-    return !!r?.waiting || await caches.has('queuezerotwo-v53');
+    return !!r?.waiting || await caches.has('queuezerotwo-v54');
   },null,{timeout:10000});
   await page.evaluate(async()=>{
     const r=await navigator.serviceWorker.getRegistration();
@@ -117,7 +117,7 @@ async function simulateOldCacheToV44(browser,oldVersion) {
   });
   await page.waitForFunction(async()=>{
     const r=await navigator.serviceWorker.getRegistration();
-    return !!r && !r.waiting && r.active?.state==='activated' && await caches.has('queuezerotwo-v53');
+    return !!r && !r.waiting && r.active?.state==='activated' && await caches.has('queuezerotwo-v54');
   },null,{timeout:10000});
   // The aborted Supabase request must settle before the startup-resume timer
   // fires, leaving one pending state item for queue coalescing to replace.
@@ -127,7 +127,7 @@ async function simulateOldCacheToV44(browser,oldVersion) {
     return q.length===1&&Number.isSafeInteger(q[0]?.payload?.seq);
   },null,{timeout:5000});
   const out=await page.evaluate(async(oldVersion)=>{
-    const cache=await caches.open('queuezerotwo-v53');
+    const cache=await caches.open('queuezerotwo-v54');
     return {
       queue:JSON.parse(localStorage.getItem('queuezerotwo-publish-queue-v1')||'{"items":[]}').items,
       state:JSON.parse(localStorage.getItem('pickleStackState')||'{}'),

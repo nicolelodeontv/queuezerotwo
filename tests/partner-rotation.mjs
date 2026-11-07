@@ -145,6 +145,6 @@ assert.ok(html.includes("R.md='soc';R.rotationModeVersion=1"), 'restored backups
 assert.ok(html.includes("R.ws=false;"), 'restored backups always turn Winners Stay off');
 assert.ok(html.includes("R.eq=true;"), 'restored backups always use equal sit-outs');
 assert.ok(html.includes("S.md='soc';S.ws=false;S.eq=true;"), 'saved sessions are normalised to the single Shuffle mode on load');
-assert.ok(html.includes("function smd(m){S.md=m==='soc'?'soc':'bal';S.rotationModeVersion=1;"), 'manual mode changes must be preserved after migration');
+assert.ok(!html.includes('function smd(')&&!html.includes('id="mdb"'), 'the old mode switches are gone: Shuffle is the only mode');
 
 console.log(JSON.stringify({pass:true,largeRosterRuns},null,2));
