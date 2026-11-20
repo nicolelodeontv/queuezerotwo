@@ -10,7 +10,10 @@
     "test:queue-rotation": "node tests/queue-return-rotation.mjs",
     "test:next-up-preview": "node tests/next-up-preview-mobile.mjs",
     "test:live-view-preview": "node tests/live-view-next-up-preview.mjs",
-    "test:session-report": "node tests/session-summary-report.mjs"
+    "test:session-report": "node tests/session-summary-report.mjs",
+    "test:backup-integrity": "node tests/backup-integrity.mjs",
+    "test:publish-reliability": "node tests/publish-reliability.mjs",
+    "test:handoff-safety": "node tests/handoff-safety.mjs"
   },
   "devDependencies": {
     "tailwindcss": "^3.4.17"
